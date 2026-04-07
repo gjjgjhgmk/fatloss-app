@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 import '../../core/database/hive_helper.dart';
+import '../../core/firebase/firestore_service.dart';
 import '../../core/utils/date_type_resolver.dart';
 import '../models/daily_meal_record.dart';
 import '../models/meal_item_record.dart';
@@ -7,6 +8,7 @@ import '../models/meal_item_record.dart';
 class DailyRecordRepository {
   final HiveHelper _hiveHelper = HiveHelper.instance;
   final _uuid = const Uuid();
+  final FirestoreService _firestore = FirestoreService();
 
   /// 获取某日所有餐次记录
   List<DailyMealRecord> getDailyRecords(String date) {
@@ -93,6 +95,14 @@ class DailyRecordRepository {
   Future<void> skipMeal(String date, int mealOrder) async {
     final id = '${date}_$mealOrder';
     await updateMealStatus(id, 'skipped');
+
+    // 同步到 Firebase
+    final record = _hiveHelper.dailyMealRecordsBoxInstance.get(id);
+    if (record != null) {
+      try {
+        await _firestore.saveDailyMealRecords([record]);
+      } catch (_) {}
+    }
   }
 
   /// 保存食材到餐次
@@ -124,16 +134,17 @@ class DailyRecordRepository {
 
     final record = _hiveHelper.dailyMealRecordsBoxInstance.get(dailyMealRecordId);
     if (record != null) {
-      await _hiveHelper.dailyMealRecordsBoxInstance.put(
-        dailyMealRecordId,
-        record.copyWith(
-          actualCarb: totalCarb,
-          actualProtein: totalProtein,
-          actualFat: totalFat,
-          mealStatus: 'completed',
-          updatedAt: DateTime.now(),
-        ),
+      final updatedRecord = record.copyWith(
+        actualCarb: totalCarb,
+        actualProtein: totalProtein,
+        actualFat: totalFat,
+        mealStatus: 'completed',
+        updatedAt: DateTime.now(),
       );
+      await _hiveHelper.dailyMealRecordsBoxInstance.put(dailyMealRecordId, updatedRecord);
+
+      // 同步到 Firebase
+      await _syncMealRecordToFirebase(updatedRecord, items);
     }
   }
 
@@ -180,5 +191,15 @@ class DailyRecordRepository {
         .toList();
     records.sort((a, b) => a.recordDate.compareTo(b.recordDate));
     return records;
+  }
+
+  /// 同步餐次记录到 Firebase
+  Future<void> _syncMealRecordToFirebase(DailyMealRecord record, List<MealItemRecord> items) async {
+    try {
+      await _firestore.saveDailyMealRecords([record]);
+      await _firestore.saveMealItemRecords(items);
+    } catch (_) {
+      // Firebase 同步失败不影响本地操作
+    }
   }
 }

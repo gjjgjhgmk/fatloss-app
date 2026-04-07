@@ -10,13 +10,12 @@ class FirebaseConfig {
   // 4. 复制下面的配置值
   // ============================================
 
-  static const String apiKey = 'AIzaSyDXgdQ5KhVHkJmYjUK5AXmV4R6rQllFMVk';
-  static const String authDomain = 'fatloss-7001c.firebaseapp.com';
-  static const String projectId = 'fatloss-7001c';
-  static const String storageBucket = 'fatloss-7001c.firebasestorage.app';
-  static const String messagingSenderId = '475138093961';
-  static const String appId = '1:475138093961:web:64c8c21e02d7ec208c6758';
-
+  static const apiKey = "AIzaSyDXgdQ5KhVHkJmYjUK5AXmV4R6rQllFMVk";
+  static const authDomain = "fatloss-7001c.firebaseapp.com";
+  static const projectId = "fatloss-7001c";
+  static const storageBucket = "fatloss-7001c.firebasestorage.app";
+  static const messagingSenderId = "475138093961";
+  static const appId = "1:475138093961:web:64c8c21e02d7ec208c6758";
   static FirebaseOptions get options => const FirebaseOptions(
         apiKey: apiKey,
         authDomain: authDomain,

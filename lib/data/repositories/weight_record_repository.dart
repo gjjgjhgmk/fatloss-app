@@ -1,8 +1,10 @@
 import '../../core/database/hive_helper.dart';
+import '../../core/firebase/firestore_service.dart';
 import '../models/weight_record.dart';
 
 class WeightRecordRepository {
   final HiveHelper _hiveHelper = HiveHelper.instance;
+  final FirestoreService _firestore = FirestoreService();
 
   /// 获取某日体重记录（早上和晚上）
   List<WeightRecord> getWeightRecordsForDate(String date) {
@@ -30,6 +32,10 @@ class WeightRecordRepository {
   /// 保存体重记录
   Future<void> saveWeightRecord(WeightRecord record) async {
     await _hiveHelper.weightRecordsBoxInstance.put(record.id, record);
+    // 同步到 Firebase
+    try {
+      await _firestore.saveWeightRecord(record);
+    } catch (_) {}
   }
 
   /// 删除体重记录
