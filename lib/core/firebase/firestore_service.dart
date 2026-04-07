@@ -48,9 +48,18 @@ class FirestoreService {
         .where('recordDate', isEqualTo: date)
         .get();
 
-    return snapshot.docs.map((doc) {
-      return DailyMealRecord.fromMap(doc.data() as Map<String, dynamic>);
-    }).toList();
+    final List<DailyMealRecord> records = [];
+    for (final doc in snapshot.docs) {
+      try {
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data != null) {
+          records.add(DailyMealRecord.fromMap(data));
+        }
+      } catch (_) {
+        // Skip malformed documents
+      }
+    }
+    return records;
   }
 
   Future<List<MealItemRecord>> getMealItemRecords(String dailyMealRecordId) async {
@@ -187,7 +196,17 @@ class FirestoreService {
   /// 监听今日饮食概览变化
   Stream<Map<String, dynamic>> watchPublicTodayOverview(String date) {
     return watchDailyMealRecords(date).asyncMap((snapshot) async {
-      final records = snapshot.docs.map((doc) => DailyMealRecord.fromMap(doc.data() as Map<String, dynamic>)).toList();
+      final List<DailyMealRecord> records = [];
+      for (final doc in snapshot.docs) {
+        try {
+          final data = doc.data() as Map<String, dynamic>?;
+          if (data != null) {
+            records.add(DailyMealRecord.fromMap(data));
+          }
+        } catch (_) {
+          // Skip malformed documents
+        }
+      }
       final weights = await getWeightRecords(limit: 1);
 
       double totalCarb = 0, totalProtein = 0, totalFat = 0;

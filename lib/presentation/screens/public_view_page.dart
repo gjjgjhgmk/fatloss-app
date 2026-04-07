@@ -112,11 +112,21 @@ class _PublicViewPageState extends State<PublicViewPage> {
   }
 
   Widget _buildDateHeader() {
-    final date = DateTime.parse(_overview!['date'] as String);
+    final dateStr = _overview!['date'] as String?;
     final dateFormat = DateFormat('M月d日 E');
-    final dayType = _overview!['records'].isNotEmpty
-        ? (_overview!['records'] as List).first['dayType'] as String
-        : 'rest';
+    DateTime date;
+    try {
+      date = dateStr != null ? DateTime.parse(dateStr) : DateTime.now();
+    } catch (_) {
+      date = DateTime.now();
+    }
+    String dayType = 'rest';
+    if (_overview!['records'] != null && (_overview!['records'] as List).isNotEmpty) {
+      final firstRecord = (_overview!['records'] as List).first;
+      if (firstRecord is Map) {
+        dayType = (firstRecord as Map)['dayType'] as String? ?? 'rest';
+      }
+    }
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -218,16 +228,18 @@ class _PublicViewPageState extends State<PublicViewPage> {
   }
 
   Widget _buildMealCard(Map<String, dynamic> record) {
-    final mealOrder = record['mealOrder'] as int;
-    final mealTime = record['mealTime'] as String;
-    final actualCarb = (record['actualCarb'] as num).toDouble();
-    final actualProtein = (record['actualProtein'] as num).toDouble();
-    final actualFat = (record['actualFat'] as num).toDouble();
-    final mealStatus = record['mealStatus'] as String;
+    final mealOrder = (record['mealOrder'] as num?)?.toInt() ?? 0;
+    final mealTime = (record['mealTime'] as String?) ?? '';
+    final actualCarb = (record['actualCarb'] as num?)?.toDouble() ?? 0;
+    final actualProtein = (record['actualProtein'] as num?)?.toDouble() ?? 0;
+    final actualFat = (record['actualFat'] as num?)?.toDouble() ?? 0;
+    final mealStatus = (record['mealStatus'] as String?) ?? 'pending';
+    final isPreWorkout = record['isPreWorkout'] == true || record['isPreWorkout'] == 1;
+    final isPostWorkout = record['isPostWorkout'] == true || record['isPostWorkout'] == 1;
 
     String mealLabel = '第${mealOrder}餐 $mealTime';
-    if (record['isPreWorkout'] == true) mealLabel = '练前餐 $mealTime';
-    if (record['isPostWorkout'] == true) mealLabel = '练后餐 $mealTime';
+    if (isPreWorkout) mealLabel = '练前餐 $mealTime';
+    if (isPostWorkout) mealLabel = '练后餐 $mealTime';
 
     Color statusColor;
     IconData statusIcon;
