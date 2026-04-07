@@ -73,14 +73,14 @@ git push -u origin main
 1. 访问 [vercel.com](https://vercel.com)
 2. 使用 GitHub 账号登录
 3. 点击 **New Project**
-4. 导入刚才推送的仓库
+4. 导入仓库 `https://github.com/gjjgjhgmk/fatloss-app`
 5. Vercel 会自动检测 Flutter 项目
 6. 点击 **Deploy**
 
 ## 第七步：访问你的应用
 
-- **编辑入口**（你自己用）：`https://你的vercel项目.vercel.app/`
-- **围观入口**（粉丝用）：`https://你的vercel项目.vercel.app/#/public`
+- **编辑入口**（你自己用）：`https://fatloss-app.vercel.app/`
+- **围观入口**（粉丝用）：`https://fatloss-app.vercel.app/#/public`
 
 ## 注意事项
 
