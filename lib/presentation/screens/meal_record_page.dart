@@ -1,0 +1,446 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+import '../../core/utils/nutrition_calculator.dart';
+import '../../data/models/ingredient.dart';
+import '../../data/models/meal_item_record.dart';
+import '../../data/repositories/daily_record_repository.dart';
+import '../providers/diet_provider.dart';
+
+class MealRecordPage extends StatefulWidget {
+  final int mealOrder;
+
+  const MealRecordPage({super.key, required this.mealOrder});
+
+  @override
+  State<MealRecordPage> createState() => _MealRecordPageState();
+}
+
+class _MealRecordPageState extends State<MealRecordPage> {
+  final List<_SelectedItem> _selectedItems = [];
+  final _searchController = TextEditingController();
+  final _amountController = TextEditingController();
+  final _notesController = TextEditingController();
+  final _dailyRecordRepo = DailyRecordRepository();
+  String _selectedCategory = 'all';
+  Ingredient? _selectedIngredient;
+  String? _photoBase64;
+  final _uuid = const Uuid();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _amountController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('第${widget.mealOrder}餐记录'),
+        actions: [
+          IconButton(
+            icon: Icon(_photoBase64 != null ? Icons.photo : Icons.photo_camera),
+            onPressed: _takePhoto,
+            tooltip: '拍照打卡',
+          ),
+        ],
+      ),
+      body: Consumer<DietProvider>(
+        builder: (context, provider, child) {
+          final meal = provider.getMealRecord(widget.mealOrder);
+          if (meal == null) {
+            return const Center(child: Text('餐次信息不存在'));
+          }
+
+          return Column(
+            children: [
+              // 餐次信息
+              Container(
+                padding: const EdgeInsets.all(16),
+                color: Theme.of(context).colorScheme.primaryContainer,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildMealInfo('预设碳水', '${meal.plannedCarb.toStringAsFixed(0)}g'),
+                    _buildMealInfo('预设蛋白', '${meal.plannedProtein.toStringAsFixed(0)}g'),
+                    _buildMealInfo('预设脂肪', '${meal.plannedFat.toStringAsFixed(0)}g'),
+                  ],
+                ),
+              ),
+
+              // 照片预览
+              if (_photoBase64 != null)
+                Container(
+                  height: 120,
+                  width: double.infinity,
+                  margin: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    image: DecorationImage(
+                      image: MemoryImage(base64Decode(_photoBase64!)),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => setState(() => _photoBase64 = null),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.black54,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // 已选食材
+              if (_selectedItems.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '已选食材',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      ..._selectedItems.map((item) => _buildSelectedItem(item)),
+                    ],
+                  ),
+                ),
+
+              // 实时营养素计算
+              _buildNutritionPreview(),
+
+              // 食材搜索和选择
+              Expanded(
+                child: _buildIngredientSelector(provider),
+              ),
+
+              // 备注输入
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: _notesController,
+                  decoration: const InputDecoration(
+                    hintText: '添加备注（如：少油煎）',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 1,
+                ),
+              ),
+
+              // 保存按钮
+              _buildSaveButton(provider),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMealInfo(String label, String value) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12)),
+        Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  Widget _buildSelectedItem(_SelectedItem item) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        title: Text(item.ingredient.name),
+        subtitle: Text('${item.amount.toStringAsFixed(0)}g'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${item.nutrition.carb.toStringAsFixed(0)}c '
+                '${item.nutrition.protein.toStringAsFixed(0)}p '
+                '${item.nutrition.fat.toStringAsFixed(0)}f'),
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              onPressed: () {
+                setState(() {
+                  _selectedItems.remove(item);
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNutritionPreview() {
+    NutritionData total = const NutritionData(carb: 0, protein: 0, fat: 0);
+    for (final item in _selectedItems) {
+      total = total + item.nutrition;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: Colors.blue[50],
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildNutritionChip('碳水', total.carb, Colors.orange),
+          _buildNutritionChip('蛋白质', total.protein, Colors.red),
+          _buildNutritionChip('脂肪', total.fat, Colors.blue),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNutritionChip(String label, double value, Color color) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12)),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(
+            '${value.toStringAsFixed(0)}g',
+            style: TextStyle(color: color, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildIngredientSelector(DietProvider provider) {
+    return Column(
+      children: [
+        // 搜索框
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: '搜索食材',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        provider.searchIngredients('');
+                      },
+                    )
+                  : null,
+            ),
+            onChanged: (value) => provider.searchIngredients(value),
+          ),
+        ),
+
+        // 类别筛选
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              _buildCategoryChip('全部', 'all'),
+              _buildCategoryChip('碳水类', 'carb'),
+              _buildCategoryChip('蛋白质类', 'protein'),
+              _buildCategoryChip('脂肪类', 'fat'),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        // 食材列表
+        Expanded(
+          child: provider.filteredIngredients.isEmpty
+              ? const Center(child: Text('暂无食材，请先添加'))
+              : ListView.builder(
+                  itemCount: provider.filteredIngredients.length,
+                  itemBuilder: (context, index) {
+                    final ingredient = provider.filteredIngredients[index];
+                    return ListTile(
+                      title: Text(ingredient.name),
+                      subtitle: Text(
+                        '每100g: ${ingredient.carbPer100g.toStringAsFixed(0)}c '
+                        '${ingredient.proteinPer100g.toStringAsFixed(0)}p '
+                        '${ingredient.fatPer100g.toStringAsFixed(0)}f',
+                      ),
+                      trailing: const Icon(Icons.add_circle_outline),
+                      onTap: () => _showAddIngredientDialog(context, provider, ingredient),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryChip(String label, String category) {
+    final isSelected = _selectedCategory == category;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (selected) {
+          setState(() {
+            _selectedCategory = category;
+          });
+          context.read<DietProvider>().filterByCategory(category);
+        },
+      ),
+    );
+  }
+
+  void _showAddIngredientDialog(
+    BuildContext context,
+    DietProvider provider,
+    Ingredient ingredient,
+  ) {
+    _selectedIngredient = ingredient;
+    _amountController.text = '';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('添加 ${ingredient.name}'),
+        content: TextField(
+          controller: _amountController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: '克数 (g)',
+            hintText: '例如: 100',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final amount = double.tryParse(_amountController.text);
+              if (amount != null && amount > 0) {
+                final nutrition = provider.calculateIngredientNutrition(ingredient, amount);
+                setState(() {
+                  _selectedItems.add(_SelectedItem(
+                    ingredient: ingredient,
+                    amount: amount,
+                    nutrition: nutrition,
+                  ));
+                });
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('添加'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _takePhoto() {
+    // Web环境下使用文件选择作为替代方案
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('拍照打卡'),
+        content: const Text('Web版本暂不支持直接拍照，您可以在保存后手动添加照片备注。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSaveButton(DietProvider provider) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _selectedItems.isEmpty
+                ? null
+                : () => _saveMeal(provider),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+            child: const Text('保存记录', style: TextStyle(fontSize: 16)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveMeal(DietProvider provider) async {
+    final meal = provider.getMealRecord(widget.mealOrder);
+    if (meal == null) return;
+
+    final items = _selectedItems
+        .map((item) => MealItemRecord(
+              id: _uuid.v4(),
+              dailyMealRecordId: meal.id,
+              ingredientId: item.ingredient.id,
+              ingredientName: item.ingredient.name,
+              amount: item.amount,
+              carb: item.nutrition.carb,
+              protein: item.nutrition.protein,
+              fat: item.nutrition.fat,
+              isManualInput: false,
+            ))
+        .toList();
+
+    await provider.recordMeal(mealOrder: widget.mealOrder, items: items);
+
+    // 更新照片和备注
+    if (_photoBase64 != null || _notesController.text.isNotEmpty) {
+      final updatedMeal = meal.copyWith(
+        photoUrl: _photoBase64,
+        notes: _notesController.text.isNotEmpty ? _notesController.text : null,
+        updatedAt: DateTime.now(),
+      );
+      await _dailyRecordRepo.updateMealActual(updatedMeal);
+    }
+
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('记录保存成功')),
+      );
+    }
+  }
+}
+
+class _SelectedItem {
+  final Ingredient ingredient;
+  final double amount;
+  final NutritionData nutrition;
+
+  _SelectedItem({
+    required this.ingredient,
+    required this.amount,
+    required this.nutrition,
+  });
+}
