@@ -13,8 +13,15 @@ if [ ! -d "flutter" ]; then
   rm flutter.tar.xz
 fi
 
+# 修复 git safe.directory 问题
+git config --global --add safe.directory /vercel/path0/flutter
+git config --global --add safe.directory /vercel/path0
+
 # 添加到 PATH
 export PATH="$PATH:$PWD/flutter/bin"
+
+# 停用分析
+flutter config --no-analytics
 
 # 启用 web 支持
 flutter config --enable-web
