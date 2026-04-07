@@ -26,6 +26,12 @@ class DateTypeResolver {
     }
   }
 
+  /// 检查某天是否被手动设为休息日
+  static bool isManualRestDay(DateTime date) {
+    final dateStr = _formatDate(date);
+    return _manualRestDays.contains(dateStr);
+  }
+
   /// 设置某天是否有氧
   static void setCardioDay(DateTime date, bool hasCardio) {
     final dateStr = _formatDate(date);

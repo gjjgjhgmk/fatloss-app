@@ -99,6 +99,52 @@ class DailyMealRecord extends HiveObject {
 
   bool get hasPhoto => photoUrl != null && photoUrl!.isNotEmpty;
 
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'recordDate': recordDate,
+      'dayType': dayType,
+      'mealOrder': mealOrder,
+      'mealTime': mealTime,
+      'plannedCarb': plannedCarb,
+      'plannedProtein': plannedProtein,
+      'plannedFat': plannedFat,
+      'actualCarb': actualCarb,
+      'actualProtein': actualProtein,
+      'actualFat': actualFat,
+      'mealStatus': mealStatus,
+      'notes': notes,
+      'isPreWorkout': isPreWorkout,
+      'isPostWorkout': isPostWorkout,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'photoUrl': photoUrl,
+    };
+  }
+
+  factory DailyMealRecord.fromMap(Map<String, dynamic> map) {
+    return DailyMealRecord(
+      id: map['id'] as String,
+      recordDate: map['recordDate'] as String,
+      dayType: map['dayType'] as String,
+      mealOrder: map['mealOrder'] as int,
+      mealTime: map['mealTime'] as String,
+      plannedCarb: (map['plannedCarb'] as num).toDouble(),
+      plannedProtein: (map['plannedProtein'] as num).toDouble(),
+      plannedFat: (map['plannedFat'] as num).toDouble(),
+      actualCarb: (map['actualCarb'] as num?)?.toDouble() ?? 0,
+      actualProtein: (map['actualProtein'] as num?)?.toDouble() ?? 0,
+      actualFat: (map['actualFat'] as num?)?.toDouble() ?? 0,
+      mealStatus: map['mealStatus'] as String? ?? 'pending',
+      notes: map['notes'] as String?,
+      isPreWorkout: map['isPreWorkout'] as bool? ?? false,
+      isPostWorkout: map['isPostWorkout'] as bool? ?? false,
+      createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt'] as String) : DateTime.now(),
+      updatedAt: map['updatedAt'] != null ? DateTime.parse(map['updatedAt'] as String) : DateTime.now(),
+      photoUrl: map['photoUrl'] as String?,
+    );
+  }
+
   DailyMealRecord copyWith({
     String? id,
     String? recordDate,

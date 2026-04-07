@@ -85,4 +85,38 @@ class Ingredient extends HiveObject {
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'category': category,
+      'carbPer100g': carbPer100g,
+      'proteinPer100g': proteinPer100g,
+      'fatPer100g': fatPer100g,
+      'isCooked': isCooked,
+      'isCommon': isCommon,
+      'remainingAmount': remainingAmount,
+      'unit': unit,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  factory Ingredient.fromMap(Map<String, dynamic> map) {
+    return Ingredient(
+      id: map['id'] as String,
+      name: map['name'] as String,
+      category: map['category'] as String,
+      carbPer100g: (map['carbPer100g'] as num).toDouble(),
+      proteinPer100g: (map['proteinPer100g'] as num).toDouble(),
+      fatPer100g: (map['fatPer100g'] as num).toDouble(),
+      isCooked: map['isCooked'] as bool? ?? false,
+      isCommon: map['isCommon'] as bool? ?? false,
+      remainingAmount: (map['remainingAmount'] as num?)?.toDouble(),
+      unit: map['unit'] as String? ?? 'g',
+      createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt'] as String) : DateTime.now(),
+      updatedAt: map['updatedAt'] != null ? DateTime.parse(map['updatedAt'] as String) : DateTime.now(),
+    );
+  }
 }

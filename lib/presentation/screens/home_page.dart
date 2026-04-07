@@ -436,6 +436,7 @@ class _HomePageState extends State<HomePage> {
   void _showDayTypeSettings(BuildContext context, DietProvider provider) {
     final selectedDate = provider.selectedDate;
     final isCardio = DateTypeResolver.isCardioDay(selectedDate);
+    final isRest = DateTypeResolver.isManualRestDay(selectedDate);
 
     showDialog(
       context: context,
@@ -444,6 +445,16 @@ class _HomePageState extends State<HomePage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            SwitchListTile(
+              title: const Text('休息日'),
+              subtitle: const Text('跳过今日训练，训练计划顺延'),
+              value: isRest,
+              onChanged: (value) {
+                DateTypeResolver.setRestDay(selectedDate, value);
+                provider.loadDailyStatus();
+                Navigator.pop(context);
+              },
+            ),
             SwitchListTile(
               title: const Text('空腹有氧'),
               subtitle: const Text('标记今天为空腹有氧日'),

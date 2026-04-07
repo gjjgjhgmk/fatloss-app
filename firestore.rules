@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 饮食规则 - 公开只读
+    match /diet_rules/{dayType} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 每日餐次记录 - 公开只读
+    match /daily_meal_records/{recordId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 餐次食材记录 - 公开只读
+    match /meal_item_records/{recordId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 体重记录 - 公开只读
+    match /weight_records/{recordId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 腰围记录 - 公开只读
+    match /waist_records/{recordId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 食材库 - 公开只读
+    match /ingredients/{ingredientId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

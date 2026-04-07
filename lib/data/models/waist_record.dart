@@ -55,4 +55,28 @@ class WaistRecord extends HiveObject {
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'recordDate': recordDate,
+      'waist': waist,
+      'recordTime': recordTime,
+      'notes': notes,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  factory WaistRecord.fromMap(Map<String, dynamic> map) {
+    return WaistRecord(
+      id: map['id'] as String,
+      recordDate: map['recordDate'] as String,
+      waist: (map['waist'] as num).toDouble(),
+      recordTime: map['recordTime'] as String?,
+      notes: map['notes'] as String?,
+      createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt'] as String) : DateTime.now(),
+      updatedAt: map['updatedAt'] != null ? DateTime.parse(map['updatedAt'] as String) : DateTime.now(),
+    );
+  }
 }

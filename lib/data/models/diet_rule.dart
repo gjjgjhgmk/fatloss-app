@@ -61,4 +61,30 @@ class DietRule extends HiveObject {
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'dayType': dayType,
+      'totalCarb': totalCarb,
+      'totalProtein': totalProtein,
+      'totalFat': totalFat,
+      'mealCount': mealCount,
+      'specialNotes': specialNotes,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  factory DietRule.fromMap(Map<String, dynamic> map) {
+    return DietRule(
+      dayType: map['dayType'] as String,
+      totalCarb: (map['totalCarb'] as num).toDouble(),
+      totalProtein: (map['totalProtein'] as num).toDouble(),
+      totalFat: (map['totalFat'] as num).toDouble(),
+      mealCount: map['mealCount'] as int,
+      specialNotes: map['specialNotes'] as String?,
+      createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt'] as String) : DateTime.now(),
+      updatedAt: map['updatedAt'] != null ? DateTime.parse(map['updatedAt'] as String) : DateTime.now(),
+    );
+  }
 }
