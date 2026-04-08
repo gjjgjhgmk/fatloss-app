@@ -25,8 +25,9 @@
 
 ### 数据同步
 - **本地存储**：Hive 数据库，离线可用
-- **云端同步**：Firebase Firestore，公开页面实时查看
-- **围观模式**：粉丝可通过公开页面查看你的饮食和训练记录
+- **云端同步**：Supabase，云端备份 + 围观页面
+- **冷启动同步**：应用启动时自动将近期数据同步到云端
+- **围观模式**：粉丝可通过公开页面查看饮食和训练记录
 
 ---
 
@@ -36,7 +37,7 @@
 - **Flutter 3.x** - 跨平台应用框架
 - **Provider** - 状态管理
 - **Hive** - 本地数据库
-- **Firebase Firestore** - 云端数据库
+- **Supabase** - 云端数据库（PostgreSQL）
 - **Vercel** - 部署平台
 
 ### 项目结构
@@ -48,22 +49,22 @@ lib/
 │   │   ├── diet_constants.dart      # 饮食常量（营养素、餐次配置）
 │   │   └── workout_constants.dart   # 训练常量（动作计划）
 │   ├── database/
-│   │   └── hive_helper.dart         # Hive 数据库初始化
-│   ├── firebase/
-│   │   ├── firebase_config.dart     # Firebase 配置
-│   │   └── firestore_service.dart   # Firestore 服务
+│   │   └── hive_helper.dart        # Hive 数据库初始化
+│   ├── supabase/
+│   │   ├── supabase_config.dart    # Supabase 配置
+│   │   └── sync_service.dart       # 冷启动静默同步服务
 │   └── utils/
 │       ├── date_type_resolver.dart   # 日期类型解析
-│       └── nutrition_calculator.dart # 营养素计算
+│       └── nutrition_calculator.dart  # 营养素计算
 ├── data/
 │   ├── models/            # 数据模型
 │   │   ├── daily_meal_record.dart   # 每日餐次记录
 │   │   ├── meal_item_record.dart    # 餐次食材记录
 │   │   ├── ingredient.dart          # 食材
-│   │   ├── weight_record.dart      # 体重记录
-│   │   ├── waist_record.dart       # 腰围记录
-│   │   └── workout_record.dart     # 训练记录
-│   └── repositories/       # 数据仓库
+│   │   ├── weight_record.dart       # 体重记录
+│   │   ├── waist_record.dart        # 腰围记录
+│   │   └── workout_record.dart      # 训练记录
+│   └── repositories/     # 数据仓库
 │       ├── daily_record_repository.dart
 │       ├── ingredient_repository.dart
 │       ├── weight_record_repository.dart
@@ -77,15 +78,15 @@ lib/
     │   ├── diet_provider.dart
     │   ├── review_provider.dart
     │   └── workout_provider.dart
-    └── screens/           # 页面
+    └── screens/          # 页面
         ├── home_page.dart           # 首页
-        ├── workout_page.dart        # 训练打卡页
-        ├── meal_record_page.dart    # 餐次记录页
-        ├── weight_record_page.dart   # 体重记录页
-        ├── waist_record_page.dart   # 腰围记录页
-        ├── ingredient_page.dart      # 食材库页
-        ├── review_page.dart         # 复盘页
-        └── public_view_page.dart    # 公开围观页
+        ├── workout_page.dart       # 训练打卡页
+        ├── meal_record_page.dart   # 餐次记录页
+        ├── weight_record_page.dart # 体重记录页
+        ├── waist_record_page.dart  # 腰围记录页
+        ├── ingredient_page.dart     # 食材库页
+        ├── review_page.dart        # 复盘页
+        └── public_view_page.dart   # 公开围观页
 ```
 
 ---
@@ -134,46 +135,41 @@ lib/
 ### 部署到 Vercel
 
 1. 推送代码到 GitHub
-2. 在 Vercel 导入仓库 `https://github.com/gjjgjhgmk/fatloss-app`
-3. Vercel 自动检测 Flutter 项目
-4. 点击 Deploy
+2. Vercel 自动检测 Flutter 项目并部署
+3. 访问 https://vercel.com/dashboard 查看部署状态
 
-### Firebase 配置
+### Supabase 配置
 
-1. 在 [Firebase Console](https://console.firebase.google.com/) 创建项目
-2. 启用 Firestore Database
-3. 获取 Web 应用配置
-4. 更新 `lib/core/firebase/firebase_config.dart`
-5. 部署 Firestore 安全规则（见 `firestore.rules`）
-
-详细步骤见 [DEPLOY.md](DEPLOY.md)
+应用已配置好 Supabase 连接。表结构见 `DEPLOY.md`。
 
 ---
 
 ## 数据说明
 
 ### 本地存储（Hive）
-- 饮食记录
+- 饮食记录（每日餐次、食材明细）
 - 训练记录
 - 体重/腰围数据
 - 食材库
 
-### 云端同步（Firebase）
-- 所有本地数据会自动同步到 Firebase
-- 公开页面从 Firebase 读取
-- 围观用户只能读取，不能修改
+### 云端同步（Supabase）
+- **冷启动同步**：应用启动时自动同步今日数据到云端
+- **增量同步**：食材库只同步有变更的记录
+- **公开页面**：从 Supabase 读取，围观用户只能读取
 
-### 数据迁移
-如需迁移数据，可以：
-1. 导出 Hive 数据文件
-2. 编写脚本导入到 Firebase
-3. 或在应用内手动重新同步
+### 同步策略
+| 数据类型 | 同步范围 |
+|---------|---------|
+| 每日餐次 | 只同步今天的数据 |
+| 体重/腰围/训练 | 只同步今天的数据 |
+| 食材库 | 只同步有变更的记录 |
+| 饮食规则 | 仅在云端为空时同步 |
 
 ---
 
 ## 未来优化方向
 
-- [ ] 照片打卡功能（需配置 Firebase Storage）
+- [ ] 照片打卡功能
 - [ ] 历史数据图表展示
 - [ ] 训练重量记录
 - [ ] 饮食提醒功能
