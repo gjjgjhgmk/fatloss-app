@@ -412,7 +412,7 @@ class _HomePageState extends State<HomePage> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
-              IconData(WorkoutConstants.DAY_TYPE_ICONS[status.dayType] ?? 0xe5c4, fontFamily: 'MaterialIcons'),
+              _getDayTypeIcon(status.dayType),
               color: dayColor,
               size: 28,
             ),
@@ -708,5 +708,24 @@ class _HomePageState extends State<HomePage> {
         builder: (context) => const IngredientPage(),
       ),
     );
+  }
+
+  IconData _getDayTypeIcon(String dayType) {
+    switch (dayType) {
+      case 'chest':
+        return Icons.fitness_center;
+      case 'back':
+        return Icons.rowing;
+      case 'leg':
+        return Icons.directions_run;
+      case 'shoulder':
+        return Icons.accessibility_new;
+      case 'cardio':
+        return Icons.favorite;
+      case 'rest':
+        return Icons.hotel;
+      default:
+        return Icons.fitness_center;
+    }
   }
 }
