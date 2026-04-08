@@ -13,7 +13,7 @@ class WorkoutRecordRepository {
   }
 
   /// 获取或创建某日训练记录
-  Future<WorkoutRecord> getOrCreateWorkoutRecord(String date, String dayType) async {
+  Future<WorkoutRecord> getOrCreateWorkoutRecord(String date, String dayType, {bool hasCardio = false}) async {
     final id = '${date}_$dayType';
     var record = _hiveHelper.workoutRecordsBoxInstance.get(id);
 
@@ -28,11 +28,20 @@ class WorkoutRecordRepository {
               ))
           .toList();
 
+      // 如果有空腹有氧，添加 60min 爬坡
+      if (hasCardio) {
+        exercises.add(WorkoutExercise(
+          name: '60min 爬坡',
+          duration: 60,
+        ));
+      }
+
       record = WorkoutRecord(
         id: id,
         recordDate: date,
         dayType: dayType,
         exercises: exercises,
+        hasCardio: hasCardio,
       );
 
       await _hiveHelper.workoutRecordsBoxInstance.put(id, record);

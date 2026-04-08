@@ -1,72 +1,105 @@
 import '../constants/diet_constants.dart';
+import '../../data/models/app_settings.dart';
+import '../database/hive_helper.dart';
 
 class DateTypeResolver {
-  // 基准日期：假设项目初始化当天为练背日（用户可自定义）
-  static DateTime _baseDate = DateTime.now();
+  // 训练循环：背→胸→腿→背→胸→肩→休息（7天循环）
+  static const List<String> TRAINING_CYCLE = [
+    'back',    // 0: 练背日
+    'chest',   // 1: 练胸日
+    'leg',     // 2: 练腿日
+    'back',    // 3: 练背日
+    'chest',   // 4: 练胸日
+    'shoulder',// 5: 练肩日
+    'rest',    // 6: 休息日
+  ];
 
-  // 手动设置的休息日列表（用于特殊情况顺延）
-  static final Set<String> _manualRestDays = {};
-
-  // 手动设置的有氧日列表
-  static final Set<String> _cardioDays = {};
-
-  static void setBaseDate(DateTime date) {
-    _baseDate = DateTime(date.year, date.month, date.day);
+  static AppSettings _getSettings() {
+    return HiveHelper.instance.appSettingsBoxInstance.get('settings') ??
+        AppSettings(cycleStartDate: DateTime.now());
   }
 
-  static DateTime get baseDate => _baseDate;
+  static Future<void> _saveSettings(AppSettings settings) async {
+    await HiveHelper.instance.appSettingsBoxInstance.put('settings', settings);
+  }
 
-  /// 设置某天为休息日
-  static void setRestDay(DateTime date, bool isRest) {
+  /// 获取周期基准日
+  static DateTime get cycleStartDate => _getSettings().cycleStartDate;
+
+  /// 设置周期基准日
+  static Future<void> setCycleStartDate(DateTime date) async {
+    final settings = _getSettings();
+    await _saveSettings(settings.copyWith(cycleStartDate: date));
+  }
+
+  /// 获取累积的顺延天数
+  static int get skippedDays => _getSettings().skippedDays;
+
+  /// 设置某天为休息日（顺延机制）
+  /// 当用户将原本的训练日设为休息日时，需要顺延整个计划
+  static Future<void> setRestDay(DateTime date, bool isRest) async {
+    final settings = _getSettings();
     final dateStr = _formatDate(date);
+    final today = DateTime.now();
+    final todayStr = _formatDate(today);
+
     if (isRest) {
-      _manualRestDays.add(dateStr);
-    } else {
-      _manualRestDays.remove(dateStr);
+      // 只有设置"今天"为休息日时才触发顺延
+      if (dateStr == todayStr) {
+        // 获取今天原本的训练日类型
+        final originalDayType = _getBaseDayType(date, settings);
+
+        // 只有原本是训练日才需要顺延
+        if (originalDayType != 'rest') {
+          await _saveSettings(settings.copyWith(
+            skippedDays: settings.skippedDays + 1,
+          ));
+        }
+      }
     }
   }
 
-  /// 检查某天是否被手动设为休息日
+  /// 检查某天是否被手动设为休息日（通过顺延机制实现）
   static bool isManualRestDay(DateTime date) {
-    final dateStr = _formatDate(date);
-    return _manualRestDays.contains(dateStr);
-  }
-
-  /// 设置某天是否有氧
-  static void setCardioDay(DateTime date, bool hasCardio) {
-    final dateStr = _formatDate(date);
-    if (hasCardio) {
-      _cardioDays.add(dateStr);
-    } else {
-      _cardioDays.remove(dateStr);
-    }
+    final dayType = resolveDayType(date);
+    return dayType == 'rest';
   }
 
   /// 判断是否为空腹有氧日
   static bool isCardioDay(DateTime date) {
     final dateStr = _formatDate(date);
-    return _cardioDays.contains(dateStr);
+    return _getSettings().isCardioDay(dateStr);
+  }
+
+  /// 设置某天是否有氧
+  static Future<void> setCardioDay(DateTime date, bool hasCardio) async {
+    final settings = _getSettings();
+    final dateStr = _formatDate(date);
+
+    if (hasCardio) {
+      settings.addCardioDay(dateStr);
+    } else {
+      settings.removeCardioDay(dateStr);
+    }
+
+    await _saveSettings(settings);
   }
 
   /// 获取基础训练日类型（不考虑手动设置的休息日）
-  /// 训练循环：背→胸→腿→背→胸→肩→休息（7天循环）
-  static String _getBaseDayType(DateTime date) {
-    final weekday = date.weekday; // 1=周一, 7=周日
-    final adjustedWeekday = weekday - 1; // 转为0=周一, 6=周日
-    return DietConstants.WEEKDAY_TRAINING[adjustedWeekday] ?? 'rest';
+  /// 使用周期计算：effectiveDays = (today - cycleStartDate).inDays - skippedDays
+  static String _getBaseDayType(DateTime date, AppSettings settings) {
+    final effectiveDays = date.difference(settings.cycleStartDate).inDays - settings.skippedDays;
+    final cyclePosition = effectiveDays % 7;
+    // 确保 cyclePosition 为正数
+    final adjustedPosition = cyclePosition < 0 ? cyclePosition + 7 : cyclePosition;
+    return TRAINING_CYCLE[adjustedPosition];
   }
 
   /// 综合判断日期类型
-  /// 优先使用手动设置的休息日，否则使用训练循环
+  /// 训练循环：背→胸→腿→背→胸→肩→休息（7天循环）
   static String resolveDayType(DateTime date) {
-    final dateStr = _formatDate(date);
-
-    // 优先检查手动设置的休息日
-    if (_manualRestDays.contains(dateStr)) {
-      return 'rest';
-    }
-
-    return _getBaseDayType(date);
+    final settings = _getSettings();
+    return _getBaseDayType(date, settings);
   }
 
   /// 获取日期类型中文名称
@@ -114,9 +147,10 @@ class DateTypeResolver {
 
   /// 获取训练循环中的位置（0-6）
   static int getCyclePosition(DateTime date) {
-    final weekday = date.weekday;
-    final adjustedWeekday = weekday - 1; // 0=周一
-    return adjustedWeekday;
+    final settings = _getSettings();
+    final effectiveDays = date.difference(settings.cycleStartDate).inDays - settings.skippedDays;
+    final cyclePosition = effectiveDays % 7;
+    return cyclePosition < 0 ? cyclePosition + 7 : cyclePosition;
   }
 
   static String _formatDate(DateTime date) {

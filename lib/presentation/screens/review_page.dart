@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../core/utils/nutrition_calculator.dart';
+import '../../core/constants/workout_constants.dart';
 import '../../domain/usecases/diet_review_generator.dart';
 import '../providers/review_provider.dart';
 
@@ -105,6 +106,8 @@ class _ReviewPageState extends State<ReviewPage> with SingleTickerProviderStateM
                 _buildWarnings(review.warnings),
                 const SizedBox(height: 24),
               ],
+              _buildWorkoutSummary(),
+              const SizedBox(height: 24),
               _buildMealDetails(review),
               const SizedBox(height: 24),
               _buildNotesSection(review),
@@ -262,6 +265,156 @@ class _ReviewPageState extends State<ReviewPage> with SingleTickerProviderStateM
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text('• $w'),
               )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkoutSummary() {
+    return Consumer<ReviewProvider>(
+      builder: (context, provider, child) {
+        final workout = provider.workoutSummary;
+        if (workout == null) {
+          return const SizedBox();
+        }
+
+        // 如果是休息日且没有空腹有氧，不显示训练总结
+        if (workout.dayType == 'rest' && !workout.hasCardio) {
+          return const SizedBox();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '训练总结',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            // 力量训练总结
+            if (workout.dayType != 'rest') ...[
+              _buildStrengthTrainingCard(workout),
+              const SizedBox(height: 12),
+            ],
+            // 空腹有氧总结
+            if (workout.hasCardio) _buildCardioSummaryCard(workout),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildStrengthTrainingCard(WorkoutSummary workout) {
+    final dayColor = Color(WorkoutConstants.DAY_TYPE_COLORS[workout.dayType] ?? 0xFF9E9E9E);
+    final dayName = WorkoutConstants.DAY_TYPE_NAMES[workout.dayType] ?? workout.dayType;
+    final progress = workout.progress;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: dayColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: dayColor.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.fitness_center, color: dayColor, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                '力量训练 - $dayName',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: dayColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${workout.completedCount}/${workout.totalCount} 动作完成',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
+                        backgroundColor: Colors.grey[800],
+                        valueColor: AlwaysStoppedAnimation<Color>(dayColor),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Text(
+                '${(progress * 100).toInt()}%',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: dayColor,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCardioSummaryCard(WorkoutSummary workout) {
+    final isCompleted = workout.cardioCompleted;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.pink.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.pink.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isCompleted ? Icons.check_circle : Icons.favorite_border,
+            color: Colors.pink,
+            size: 24,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '空腹有氧 - 60min 爬坡',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.pink,
+                  ),
+                ),
+                Text(
+                  isCompleted ? '已完成' : '未完成',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isCompleted ? Colors.green : Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isCompleted)
+            const Icon(Icons.check, color: Colors.green)
+          else
+            const Icon(Icons.close, color: Colors.grey),
         ],
       ),
     );

@@ -9,6 +9,7 @@ import '../../data/models/weekly_review.dart';
 import '../../data/models/weight_record.dart';
 import '../../data/models/waist_record.dart';
 import '../../data/models/workout_record.dart';
+import '../../data/models/app_settings.dart';
 
 class HiveHelper {
   static final HiveHelper instance = HiveHelper._init();
@@ -24,24 +25,26 @@ class HiveHelper {
   static const String weightRecordsBox = 'weight_records';
   static const String waistRecordsBox = 'waist_records';
   static const String workoutRecordsBox = 'workout_records';
+  static const String appSettingsBox = 'app_settings';
 
   HiveHelper._init();
 
   Future<void> initialize() async {
     await Hive.initFlutter();
 
-    // Register adapters
-    Hive.registerAdapter(DietRuleAdapter());
-    Hive.registerAdapter(MealTemplateAdapter());
-    Hive.registerAdapter(IngredientAdapter());
-    Hive.registerAdapter(DailyMealRecordAdapter());
-    Hive.registerAdapter(MealItemRecordAdapter());
-    Hive.registerAdapter(DailyReviewAdapter());
-    Hive.registerAdapter(WeeklyReviewAdapter());
-    Hive.registerAdapter(WeightRecordAdapter());
-    Hive.registerAdapter(WaistRecordAdapter());
-    Hive.registerAdapter(WorkoutRecordAdapter());
-    Hive.registerAdapter(WorkoutExerciseAdapter());
+    // Register adapters (with safety check to prevent duplicate registration)
+    if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(DietRuleAdapter());
+    if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(MealTemplateAdapter());
+    if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(IngredientAdapter());
+    if (!Hive.isAdapterRegistered(3)) Hive.registerAdapter(DailyMealRecordAdapter());
+    if (!Hive.isAdapterRegistered(4)) Hive.registerAdapter(MealItemRecordAdapter());
+    if (!Hive.isAdapterRegistered(5)) Hive.registerAdapter(DailyReviewAdapter());
+    if (!Hive.isAdapterRegistered(6)) Hive.registerAdapter(WeeklyReviewAdapter());
+    if (!Hive.isAdapterRegistered(7)) Hive.registerAdapter(WeightRecordAdapter());
+    if (!Hive.isAdapterRegistered(8)) Hive.registerAdapter(WorkoutRecordAdapter());
+    if (!Hive.isAdapterRegistered(9)) Hive.registerAdapter(WorkoutExerciseAdapter());
+    if (!Hive.isAdapterRegistered(10)) Hive.registerAdapter(WaistRecordAdapter());
+    if (!Hive.isAdapterRegistered(11)) Hive.registerAdapter(AppSettingsAdapter());
 
     // Open boxes
     await Hive.openBox<DietRule>(dietRulesBox);
@@ -54,6 +57,7 @@ class HiveHelper {
     await Hive.openBox<WeightRecord>(weightRecordsBox);
     await Hive.openBox<WaistRecord>(waistRecordsBox);
     await Hive.openBox<WorkoutRecord>(workoutRecordsBox);
+    await Hive.openBox<AppSettings>(appSettingsBox);
 
     // Seed initial data if empty
     await _seedDataIfNeeded();
@@ -69,6 +73,7 @@ class HiveHelper {
   Box<WeightRecord> get weightRecordsBoxInstance => Hive.box<WeightRecord>(weightRecordsBox);
   Box<WaistRecord> get waistRecordsBoxInstance => Hive.box<WaistRecord>(waistRecordsBox);
   Box<WorkoutRecord> get workoutRecordsBoxInstance => Hive.box<WorkoutRecord>(workoutRecordsBox);
+  Box<AppSettings> get appSettingsBoxInstance => Hive.box<AppSettings>(appSettingsBox);
 
   Future<void> _seedDataIfNeeded() async {
     // Seed diet rules if empty
@@ -83,6 +88,21 @@ class HiveHelper {
     if (ingredientsBoxInstance.isEmpty) {
       await _seedCommonIngredients();
     }
+    // Seed app settings if empty
+    if (appSettingsBoxInstance.isEmpty) {
+      await _seedAppSettings();
+    }
+  }
+
+  Future<void> _seedAppSettings() async {
+    // 默认周期基准日设为 2026-04-07（练背日）
+    // 这样 2026-04-09 就是练腿日：back(4/7) → chest(4/8) → leg(4/9)
+    final settings = AppSettings(
+      cycleStartDate: DateTime(2026, 4, 7),
+      skippedDays: 0,
+      cardioDays: [],
+    );
+    await appSettingsBoxInstance.put('settings', settings);
   }
 
   Future<void> _seedDietRules() async {

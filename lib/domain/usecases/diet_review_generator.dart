@@ -1,9 +1,11 @@
 import '../../core/utils/nutrition_calculator.dart';
+import '../../core/utils/date_type_resolver.dart';
 import '../../data/models/daily_meal_record.dart';
 import '../../data/models/daily_review.dart';
 import '../../data/repositories/daily_record_repository.dart';
 import '../../data/repositories/daily_review_repository.dart';
 import '../../data/repositories/diet_rule_repository.dart';
+import '../../data/repositories/workout_record_repository.dart';
 
 class MealSummary {
   final int mealOrder;
@@ -20,6 +22,26 @@ class MealSummary {
     required this.actual,
     required this.status,
     this.isPostWorkout = false,
+  });
+}
+
+class WorkoutSummary {
+  final String recordDate;
+  final String dayType;
+  final int completedCount;
+  final int totalCount;
+  final double progress;
+  final bool hasCardio;
+  final bool cardioCompleted;
+
+  WorkoutSummary({
+    required this.recordDate,
+    required this.dayType,
+    required this.completedCount,
+    required this.totalCount,
+    required this.progress,
+    required this.hasCardio,
+    required this.cardioCompleted,
   });
 }
 
@@ -47,6 +69,7 @@ class DietReviewGenerator {
   final DailyRecordRepository _dailyRecordRepo = DailyRecordRepository();
   final DailyReviewRepository _dailyReviewRepo = DailyReviewRepository();
   final DietRuleRepository _dietRuleRepo = DietRuleRepository();
+  final WorkoutRecordRepository _workoutRecordRepo = WorkoutRecordRepository();
 
   /// 生成当日复盘报告
   Future<DietReviewResult> generateDailyReview(String date) async {
@@ -139,6 +162,36 @@ class DietReviewGenerator {
       mealSummaries: mealSummaries,
       warnings: warnings,
       userNotes: existingReview?.reviewNotes,
+    );
+  }
+
+  /// 获取当日训练总结
+  Future<WorkoutSummary> getWorkoutSummary(String date) async {
+    // 获取当日的训练记录
+    // 根据日期和日期类型获取训练记录
+    final dayType = DateTypeResolver.resolveDayType(DateTime.parse(date));
+    final id = '${date}_$dayType';
+    final record = _workoutRecordRepo.getWorkoutRecord(date, dayType);
+
+    final hasCardio = DateTypeResolver.isCardioDay(DateTime.parse(date));
+
+    // 检查是否有 60min 爬坡且已完成
+    bool cardioCompleted = false;
+    if (record != null && hasCardio) {
+      final cardioExercise = record.exercises.where((e) => e.name == '60min 爬坡').toList();
+      if (cardioExercise.isNotEmpty) {
+        cardioCompleted = cardioExercise.first.isCompleted;
+      }
+    }
+
+    return WorkoutSummary(
+      recordDate: date,
+      dayType: dayType,
+      completedCount: record?.completedCount ?? 0,
+      totalCount: record?.totalCount ?? 0,
+      progress: record?.progress ?? 0,
+      hasCardio: hasCardio,
+      cardioCompleted: cardioCompleted,
     );
   }
 

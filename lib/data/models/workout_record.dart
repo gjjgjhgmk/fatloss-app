@@ -31,6 +31,9 @@ class WorkoutRecord extends HiveObject {
   @HiveField(8)
   final DateTime updatedAt;
 
+  @HiveField(9)
+  final bool hasCardio; // 是否启用了空腹有氧
+
   WorkoutRecord({
     required this.id,
     required this.recordDate,
@@ -41,6 +44,7 @@ class WorkoutRecord extends HiveObject {
     this.notes,
     DateTime? createdAt,
     DateTime? updatedAt,
+    this.hasCardio = false,
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
 
@@ -58,6 +62,7 @@ class WorkoutRecord extends HiveObject {
     String? notes,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool? hasCardio,
   }) {
     return WorkoutRecord(
       id: id ?? this.id,
@@ -69,6 +74,7 @@ class WorkoutRecord extends HiveObject {
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      hasCardio: hasCardio ?? this.hasCardio,
     );
   }
 
@@ -83,6 +89,7 @@ class WorkoutRecord extends HiveObject {
       'notes': notes,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'hasCardio': hasCardio,
     };
   }
 
@@ -103,6 +110,7 @@ class WorkoutRecord extends HiveObject {
       updatedAt: map['updatedAt'] != null
           ? DateTime.parse(map['updatedAt'] as String)
           : DateTime.now(),
+      hasCardio: map['hasCardio'] as bool? ?? false,
     );
   }
 }

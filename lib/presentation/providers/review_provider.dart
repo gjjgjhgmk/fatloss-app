@@ -5,12 +5,14 @@ class ReviewProvider extends ChangeNotifier {
   final DietReviewGenerator _reviewGenerator = DietReviewGenerator();
 
   DietReviewResult? _dailyReview;
+  WorkoutSummary? _workoutSummary;
   Map<String, dynamic>? _weeklyReview;
   bool _isLoading = false;
   String? _error;
 
   // getters
   DietReviewResult? get dailyReview => _dailyReview;
+  WorkoutSummary? get workoutSummary => _workoutSummary;
   Map<String, dynamic>? get weeklyReview => _weeklyReview;
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -23,6 +25,7 @@ class ReviewProvider extends ChangeNotifier {
 
     try {
       _dailyReview = await _reviewGenerator.generateDailyReview(date);
+      _workoutSummary = await _reviewGenerator.getWorkoutSummary(date);
       _isLoading = false;
       notifyListeners();
     } catch (e) {

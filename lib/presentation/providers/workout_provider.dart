@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../data/models/workout_record.dart';
 import '../../data/repositories/workout_record_repository.dart';
+import '../../core/utils/date_type_resolver.dart';
 
 class WorkoutProvider extends ChangeNotifier {
   final WorkoutRecordRepository _repository = WorkoutRecordRepository();
@@ -9,12 +10,14 @@ class WorkoutProvider extends ChangeNotifier {
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
   String? _error;
+  bool _hasCardio = false;
 
   // getters
   WorkoutRecord? get currentRecord => _currentRecord;
   DateTime get selectedDate => _selectedDate;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  bool get hasCardio => _hasCardio;
 
   String get dayType => _currentRecord?.dayType ?? '';
   bool get isCompleted => _currentRecord?.isCompleted ?? false;
@@ -28,12 +31,14 @@ class WorkoutProvider extends ChangeNotifier {
     _selectedDate = date;
     _isLoading = true;
     _error = null;
+    _hasCardio = DateTypeResolver.isCardioDay(date);
     notifyListeners();
 
     try {
       _currentRecord = await _repository.getOrCreateWorkoutRecord(
         _formatDate(date),
         dayType,
+        hasCardio: _hasCardio,
       );
       _isLoading = false;
       notifyListeners();
@@ -91,6 +96,28 @@ class WorkoutProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _error = '保存备注失败: $e';
+      notifyListeners();
+    }
+  }
+
+  /// 设置空腹有氧状态
+  Future<void> setCardioDay(bool hasCardio) async {
+    try {
+      await DateTypeResolver.setCardioDay(_selectedDate, hasCardio);
+      _hasCardio = hasCardio;
+
+      // 如果当前有记录，需要更新记录
+      if (_currentRecord != null) {
+        // 重新获取记录，这会重建 exercises 列表
+        _currentRecord = await _repository.getOrCreateWorkoutRecord(
+          _formatDate(_selectedDate),
+          _currentRecord!.dayType,
+          hasCardio: hasCardio,
+        );
+      }
+      notifyListeners();
+    } catch (e) {
+      _error = '设置空腹有氧失败: $e';
       notifyListeners();
     }
   }

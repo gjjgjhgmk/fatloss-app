@@ -158,60 +158,43 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildDayTypeChips(BuildContext context, DietProvider provider, DailyDietStatus? status) {
     final currentDayType = status?.dayType ?? 'rest';
-    final isCardio = DateTypeResolver.isCardioDay(provider.selectedDate);
+    final isCardio = status?.isCardioDay ?? false;
+    final dayColor = Color(WorkoutConstants.DAY_TYPE_COLORS[currentDayType] ?? 0xFF9E9E9E);
 
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
-        _buildDayTypeChip(
-          context,
-          '休息日',
-          'rest',
-          currentDayType == 'rest',
-          Colors.grey,
-          () => _navigateToWorkout(context, provider.selectedDate, 'rest'),
-        ),
-        _buildDayTypeChip(
-          context,
-          '练背日',
-          'back',
-          currentDayType == 'back',
-          const Color(0xFF1E88E5),
-          () => _navigateToWorkout(context, provider.selectedDate, 'back'),
-        ),
-        _buildDayTypeChip(
-          context,
-          '练胸日',
-          'chest',
-          currentDayType == 'chest',
-          const Color(0xFFE53935),
-          () => _navigateToWorkout(context, provider.selectedDate, 'chest'),
-        ),
-        _buildDayTypeChip(
-          context,
-          '练腿日',
-          'leg',
-          currentDayType == 'leg',
-          const Color(0xFF43A047),
-          () => _navigateToWorkout(context, provider.selectedDate, 'leg'),
-        ),
-        _buildDayTypeChip(
-          context,
-          '练肩日',
-          'shoulder',
-          currentDayType == 'shoulder',
-          const Color(0xFFFF9800),
-          () => _navigateToWorkout(context, provider.selectedDate, 'shoulder'),
-        ),
-        _buildDayTypeChip(
-          context,
-          '空腹有氧',
-          'cardio',
-          isCardio,
-          const Color(0xFFE91E63),
-          () => _navigateToWorkout(context, provider.selectedDate, 'cardio'),
-        ),
+        // 主训练日标签（如果非休息日）
+        if (currentDayType != 'rest')
+          _buildDayTypeChip(
+            context,
+            WorkoutConstants.DAY_TYPE_NAMES[currentDayType] ?? currentDayType,
+            currentDayType,
+            true,
+            dayColor,
+            () => _navigateToWorkout(context, provider.selectedDate, currentDayType),
+          ),
+        // 空腹有氧标签（如果启用）
+        if (isCardio)
+          _buildDayTypeChip(
+            context,
+            '空腹有氧',
+            'cardio',
+            true,
+            const Color(0xFFE91E63),
+            () => _navigateToWorkout(context, provider.selectedDate, currentDayType),
+          ),
+        // 休息日显示休息标签
+        if (currentDayType == 'rest')
+          _buildDayTypeChip(
+            context,
+            '休息日',
+            'rest',
+            true,
+            Colors.grey,
+            () => _navigateToWorkout(context, provider.selectedDate, 'rest'),
+          ),
       ],
     );
   }
@@ -394,6 +377,7 @@ class _HomePageState extends State<HomePage> {
     if (status == null) return const SizedBox();
 
     final dayColor = Color(WorkoutConstants.DAY_TYPE_COLORS[status.dayType] ?? 0xFF9E9E9E);
+    final isCardio = status.isCardioDay;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -403,58 +387,103 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: dayColor.withOpacity(0.3)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: dayColor.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              _getDayTypeIcon(status.dayType),
-              color: dayColor,
-              size: 28,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: dayColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  _getDayTypeIcon(status.dayType),
+                  color: dayColor,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      status.dayTypeName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (isCardio)
+                      const Text(
+                        '空腹有氧日',
+                        style: TextStyle(color: Colors.orange, fontSize: 12),
+                      ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: () => _navigateToWorkout(context, provider.selectedDate, status.dayType),
+                style: TextButton.styleFrom(
+                  backgroundColor: dayColor.withOpacity(0.2),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.fitness_center, color: dayColor, size: 18),
+                    const SizedBox(width: 4),
+                    Text(
+                      '运动打卡',
+                      style: TextStyle(color: dayColor),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  status.dayTypeName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+          const SizedBox(height: 12),
+          // 操作按钮行
+          Row(
+            children: [
+              // 设为休息日按钮（仅训练日显示）
+              if (status.dayType != 'rest')
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      await DateTypeResolver.setRestDay(provider.selectedDate, true);
+                      await provider.loadDailyStatus();
+                    },
+                    icon: const Icon(Icons.hotel, size: 18),
+                    label: const Text('设为休息日'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey,
+                      side: const BorderSide(color: Colors.grey),
+                    ),
                   ),
                 ),
-                if (DateTypeResolver.isCardioDay(provider.selectedDate))
-                  const Text(
-                    '空腹有氧日',
-                    style: TextStyle(color: Colors.orange, fontSize: 12),
+              if (status.dayType != 'rest') const SizedBox(width: 8),
+              // 空腹有氧切换按钮
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    await DateTypeResolver.setCardioDay(provider.selectedDate, !isCardio);
+                    await provider.loadDailyStatus();
+                  },
+                  icon: Icon(
+                    isCardio ? Icons.check_box : Icons.check_box_outline_blank,
+                    size: 18,
                   ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: () => _navigateToWorkout(context, provider.selectedDate, status.dayType),
-            style: TextButton.styleFrom(
-              backgroundColor: dayColor.withOpacity(0.2),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.fitness_center, color: dayColor, size: 18),
-                const SizedBox(width: 4),
-                Text(
-                  '运动打卡',
-                  style: TextStyle(color: dayColor),
+                  label: const Text('空腹有氧'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: isCardio ? Colors.pink : Colors.pink.shade300,
+                    side: BorderSide(color: isCardio ? Colors.pink : Colors.pink.shade300),
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),

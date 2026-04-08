@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/supabase/supabase_config.dart';
 import '../../core/utils/date_type_resolver.dart';
+import '../../core/constants/workout_constants.dart';
 
 class PublicViewPage extends StatefulWidget {
   const PublicViewPage({super.key});
@@ -28,18 +29,23 @@ class _PublicViewPageState extends State<PublicViewPage> {
     });
 
     try {
-      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final today = DateTime.now();
+      final todayStr = DateFormat('yyyy-MM-dd').format(today);
+      final dayType = DateTypeResolver.resolveDayType(today);
+      final isCardio = DateTypeResolver.isCardioDay(today);
 
       // 并发请求多个表来组装数据
       final results = await Future.wait([
-        SupabaseConfig.client.from('daily_meal_records').select().eq('recordDate', today),
+        SupabaseConfig.client.from('daily_meal_records').select().eq('recordDate', todayStr),
         SupabaseConfig.client.from('weight_records').select().order('recordDate', ascending: false).limit(1),
         SupabaseConfig.client.from('waist_records').select().order('recordDate', ascending: false).limit(1),
+        SupabaseConfig.client.from('workout_records').select().eq('recordDate', todayStr).eq('dayType', dayType),
       ]);
 
       final mealRecords = results[0] as List;
       final weightRecords = results[1] as List;
       final waistRecords = results[2] as List;
+      final workoutRecords = results[3] as List;
 
       // 计算营养素总计
       double totalCarb = 0, totalProtein = 0, totalFat = 0;
@@ -52,6 +58,25 @@ class _PublicViewPageState extends State<PublicViewPage> {
         if (record['mealStatus'] == 'completed') completedMeals++;
       }
 
+      // 计算训练完成情况
+      int completedExercises = 0;
+      int totalExercises = 0;
+      bool cardioCompleted = false;
+
+      if (workoutRecords.isNotEmpty) {
+        final workout = workoutRecords.first;
+        final exercises = workout['exercises'] as List? ?? [];
+        totalExercises = exercises.length;
+        for (final ex in exercises) {
+          if (ex['isCompleted'] == true) {
+            completedExercises++;
+            if (ex['name'] == '60min 爬坡') {
+              cardioCompleted = true;
+            }
+          }
+        }
+      }
+
       final latestWeight = weightRecords.isNotEmpty
           ? (weightRecords.first['weight'] as num?)?.toDouble()
           : null;
@@ -61,7 +86,9 @@ class _PublicViewPageState extends State<PublicViewPage> {
 
       setState(() {
         _overview = {
-          'date': today,
+          'date': todayStr,
+          'dayType': dayType,
+          'isCardio': isCardio,
           'totalCarb': totalCarb,
           'totalProtein': totalProtein,
           'totalFat': totalFat,
@@ -70,6 +97,9 @@ class _PublicViewPageState extends State<PublicViewPage> {
           'latestWeight': latestWeight,
           'latestWaist': latestWaist,
           'records': mealRecords,
+          'completedExercises': completedExercises,
+          'totalExercises': totalExercises,
+          'cardioCompleted': cardioCompleted,
         };
         _loading = false;
       });
@@ -140,6 +170,8 @@ class _PublicViewPageState extends State<PublicViewPage> {
             const SizedBox(height: 16),
             _buildStatsCards(),
             const SizedBox(height: 16),
+            _buildWorkoutSummary(),
+            const SizedBox(height: 16),
             _buildMealList(),
           ],
         ),
@@ -156,13 +188,9 @@ class _PublicViewPageState extends State<PublicViewPage> {
     } catch (_) {
       date = DateTime.now();
     }
-    String dayType = 'rest';
-    if (_overview!['records'] != null && (_overview!['records'] as List).isNotEmpty) {
-      final firstRecord = (_overview!['records'] as List).first;
-      if (firstRecord is Map) {
-        dayType = (firstRecord as Map)['dayType'] as String? ?? 'rest';
-      }
-    }
+    final dayType = _overview!['dayType'] as String? ?? 'rest';
+    final isCardio = _overview!['isCardio'] as bool? ?? false;
+    final dayColor = Color(WorkoutConstants.DAY_TYPE_COLORS[dayType] ?? 0xFF9E9E9E);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -178,16 +206,34 @@ class _PublicViewPageState extends State<PublicViewPage> {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Text(
-              DateTypeResolver.getDayTypeName(dayType),
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: dayColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  DateTypeResolver.getDayTypeName(dayType),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ),
+              if (isCardio) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.pink,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Text(
+                    '空腹有氧',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),
@@ -330,6 +376,143 @@ class _PublicViewPageState extends State<PublicViewPage> {
       child: Text(
         '$label: ${value.toStringAsFixed(0)}g',
         style: TextStyle(fontSize: 12, color: color),
+      ),
+    );
+  }
+
+  Widget _buildWorkoutSummary() {
+    final dayType = _overview!['dayType'] as String? ?? 'rest';
+    final isCardio = _overview!['isCardio'] as bool? ?? false;
+    final completedExercises = _overview!['completedExercises'] as int? ?? 0;
+    final totalExercises = _overview!['totalExercises'] as int? ?? 0;
+    final cardioCompleted = _overview!['cardioCompleted'] as bool? ?? false;
+
+    // 如果是休息日且没有空腹有氧，不显示训练总结
+    if (dayType == 'rest' && !isCardio) {
+      return const SizedBox();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '训练总结',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        // 力量训练总结
+        if (dayType != 'rest') _buildPublicStrengthCard(dayType, completedExercises, totalExercises),
+        if (dayType != 'rest' && isCardio) const SizedBox(height: 12),
+        // 空腹有氧总结
+        if (isCardio) _buildPublicCardioCard(cardioCompleted),
+      ],
+    );
+  }
+
+  Widget _buildPublicStrengthCard(String dayType, int completed, int total) {
+    final dayColor = Color(WorkoutConstants.DAY_TYPE_COLORS[dayType] ?? 0xFF9E9E9E);
+    final dayName = WorkoutConstants.DAY_TYPE_NAMES[dayType] ?? dayType;
+    final progress = total > 0 ? completed / total : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: dayColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: dayColor.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.fitness_center, color: dayColor, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                '力量训练 - $dayName',
+                style: TextStyle(fontWeight: FontWeight.bold, color: dayColor),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$completed/$total 动作完成',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
+                        backgroundColor: Colors.grey[800],
+                        valueColor: AlwaysStoppedAnimation<Color>(dayColor),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Text(
+                '${(progress * 100).toInt()}%',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: dayColor,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPublicCardioCard(bool isCompleted) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.pink.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.pink.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isCompleted ? Icons.check_circle : Icons.favorite_border,
+            color: Colors.pink,
+            size: 24,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '空腹有氧 - 60min 爬坡',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.pink),
+                ),
+                Text(
+                  isCompleted ? '已完成' : '未完成',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isCompleted ? Colors.green : Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isCompleted)
+            const Icon(Icons.check, color: Colors.green)
+          else
+            const Icon(Icons.close, color: Colors.grey),
+        ],
       ),
     );
   }
