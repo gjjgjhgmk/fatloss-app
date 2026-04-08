@@ -2,7 +2,7 @@ import 'package:hive/hive.dart';
 
 part 'waist_record.g.dart';
 
-@HiveType(typeId: 8)
+@HiveType(typeId: 10)
 class WaistRecord extends HiveObject {
   @HiveField(0)
   final String id; // recordDate
@@ -59,24 +59,24 @@ class WaistRecord extends HiveObject {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'recordDate': recordDate,
+      'record_date': recordDate,
       'waist': waist,
-      'recordTime': recordTime,
+      'record_time': recordTime,
       'notes': notes,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
     };
   }
 
   factory WaistRecord.fromMap(Map<String, dynamic> map) {
     return WaistRecord(
       id: map['id'] as String,
-      recordDate: map['recordDate'] as String,
+      recordDate: map['record_date'] as String,
       waist: (map['waist'] as num).toDouble(),
-      recordTime: map['recordTime'] as String?,
+      recordTime: map['record_time'] as String?,
       notes: map['notes'] as String?,
-      createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt'] as String) : DateTime.now(),
-      updatedAt: map['updatedAt'] != null ? DateTime.parse(map['updatedAt'] as String) : DateTime.now(),
+      createdAt: map['created_at'] != null ? DateTime.parse(map['created_at'] as String) : DateTime.now(),
+      updatedAt: map['updated_at'] != null ? DateTime.parse(map['updated_at'] as String) : DateTime.now(),
     );
   }
 }

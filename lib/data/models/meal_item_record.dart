@@ -52,30 +52,30 @@ class MealItemRecord extends HiveObject {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'dailyMealRecordId': dailyMealRecordId,
-      'ingredientId': ingredientId,
-      'ingredientName': ingredientName,
+      'daily_meal_record_id': dailyMealRecordId,
+      'ingredient_id': ingredientId,
+      'name': ingredientName,
       'amount': amount,
       'carb': carb,
       'protein': protein,
       'fat': fat,
-      'isManualInput': isManualInput,
-      'createdAt': createdAt.toIso8601String(),
+      'is_manual_input': isManualInput,
+      'created_at': createdAt.toIso8601String(),
     };
   }
 
   factory MealItemRecord.fromMap(Map<String, dynamic> map) {
     return MealItemRecord(
       id: map['id'] as String,
-      dailyMealRecordId: map['dailyMealRecordId'] as String,
-      ingredientId: map['ingredientId'] as String?,
-      ingredientName: map['ingredientName'] as String,
+      dailyMealRecordId: map['daily_meal_record_id'] as String,
+      ingredientId: map['ingredient_id'] as String?,
+      ingredientName: map['name'] as String,
       amount: (map['amount'] as num).toDouble(),
       carb: (map['carb'] as num).toDouble(),
       protein: (map['protein'] as num).toDouble(),
       fat: (map['fat'] as num).toDouble(),
-      isManualInput: map['isManualInput'] as bool? ?? false,
-      createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt'] as String) : DateTime.now(),
+      isManualInput: map['is_manual_input'] == true || map['is_manual_input'] == 1,
+      createdAt: map['created_at'] != null ? DateTime.parse(map['created_at'] as String) : DateTime.now(),
     );
   }
 

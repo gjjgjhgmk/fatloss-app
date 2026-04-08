@@ -67,28 +67,28 @@ class HiveHelper {
   /// 确保所有 adapter 已注册（安全调用，不会重复注册）
   /// 使用 try-catch 防止 isAdapterRegistered 在 Web 端不可靠导致的问题
   void ensureAdapterRegistered() {
-    _safeRegister(0, () => DietRuleAdapter());
-    _safeRegister(1, () => MealTemplateAdapter());
-    _safeRegister(2, () => IngredientAdapter());
-    _safeRegister(3, () => DailyMealRecordAdapter());
-    _safeRegister(4, () => MealItemRecordAdapter());
-    _safeRegister(5, () => DailyReviewAdapter());
-    _safeRegister(6, () => WeeklyReviewAdapter());
-    _safeRegister(7, () => WeightRecordAdapter());
-    _safeRegister(8, () => WorkoutRecordAdapter());
-    _safeRegister(9, () => WorkoutExerciseAdapter());
-    _safeRegister(10, () => WaistRecordAdapter());
-    _safeRegister(11, () => AppSettingsAdapter());
+    _safeRegister<DietRule>(() => DietRuleAdapter());
+    _safeRegister<MealTemplate>(() => MealTemplateAdapter());
+    _safeRegister<Ingredient>(() => IngredientAdapter());
+    _safeRegister<DailyMealRecord>(() => DailyMealRecordAdapter());
+    _safeRegister<MealItemRecord>(() => MealItemRecordAdapter());
+    _safeRegister<DailyReview>(() => DailyReviewAdapter());
+    _safeRegister<WeeklyReview>(() => WeeklyReviewAdapter());
+    _safeRegister<WeightRecord>(() => WeightRecordAdapter());
+    _safeRegister<WorkoutRecord>(() => WorkoutRecordAdapter());
+    _safeRegister<WorkoutExercise>(() => WorkoutExerciseAdapter());
+    _safeRegister<WaistRecord>(() => WaistRecordAdapter());
+    _safeRegister<AppSettings>(() => AppSettingsAdapter());
   }
 
   /// 安全注册 adapter，忽略已注册的异常
-  void _safeRegister(int typeId, TypeAdapter Function() adapterFactory) {
+  void _safeRegister<T>(TypeAdapter<T> Function() adapterFactory) {
     try {
-      Hive.registerAdapter(adapterFactory());
+      Hive.registerAdapter<T>(adapterFactory());
     } catch (e) {
       // 忽略 "already registered" 错误
       if (!e.toString().contains('already')) {
-        print('[Hive] 注册 typeId $typeId 失败: $e');
+        print('[Hive] 注册 Adapter 失败: $e');
       }
     }
   }

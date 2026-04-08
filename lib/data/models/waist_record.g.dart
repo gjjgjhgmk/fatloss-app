@@ -4,7 +4,7 @@ part of 'waist_record.dart';
 
 class WaistRecordAdapter extends TypeAdapter<WaistRecord> {
   @override
-  final int typeId = 8;
+  final int typeId = 10;
 
   @override
   WaistRecord read(BinaryReader reader) {

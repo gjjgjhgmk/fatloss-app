@@ -81,36 +81,36 @@ class WorkoutRecord extends HiveObject {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'recordDate': recordDate,
-      'dayType': dayType,
+      'record_date': recordDate,
+      'day_type': dayType,
       'exercises': exercises.map((e) => e.toMap()).toList(),
-      'isCompleted': isCompleted,
-      'photoUrl': photoUrl,
+      'is_completed': isCompleted,
+      'photo_url': photoUrl,
       'notes': notes,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
-      'hasCardio': hasCardio,
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+      'has_cardio': hasCardio,
     };
   }
 
   factory WorkoutRecord.fromMap(Map<String, dynamic> map) {
     return WorkoutRecord(
       id: map['id'] as String,
-      recordDate: map['recordDate'] as String,
-      dayType: map['dayType'] as String,
+      recordDate: map['record_date'] as String,
+      dayType: map['day_type'] as String,
       exercises: (map['exercises'] as List)
           .map((e) => WorkoutExercise.fromMap(e as Map<String, dynamic>))
           .toList(),
-      isCompleted: map['isCompleted'] as bool? ?? false,
-      photoUrl: map['photoUrl'] as String?,
+      isCompleted: map['is_completed'] == true || map['is_completed'] == 1,
+      photoUrl: map['photo_url'] as String?,
       notes: map['notes'] as String?,
-      createdAt: map['createdAt'] != null
-          ? DateTime.parse(map['createdAt'] as String)
+      createdAt: map['created_at'] != null
+          ? DateTime.parse(map['created_at'] as String)
           : DateTime.now(),
-      updatedAt: map['updatedAt'] != null
-          ? DateTime.parse(map['updatedAt'] as String)
+      updatedAt: map['updated_at'] != null
+          ? DateTime.parse(map['updated_at'] as String)
           : DateTime.now(),
-      hasCardio: map['hasCardio'] as bool? ?? false,
+      hasCardio: map['has_cardio'] == true || map['has_cardio'] == 1,
     );
   }
 }

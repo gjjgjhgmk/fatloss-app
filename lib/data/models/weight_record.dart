@@ -45,26 +45,26 @@ class WeightRecord extends HiveObject {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'recordDate': recordDate,
-      'timeOfDay': timeOfDay,
+      'record_date': recordDate,
+      'time_of_day': timeOfDay,
       'weight': weight,
-      'recordTime': recordTime,
+      'record_time': recordTime,
       'notes': notes,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
     };
   }
 
   factory WeightRecord.fromMap(Map<String, dynamic> map) {
     return WeightRecord(
       id: map['id'] as String,
-      recordDate: map['recordDate'] as String,
-      timeOfDay: map['timeOfDay'] as String,
+      recordDate: map['record_date'] as String,
+      timeOfDay: map['time_of_day'] as String,
       weight: (map['weight'] as num).toDouble(),
-      recordTime: map['recordTime'] as String?,
+      recordTime: map['record_time'] as String?,
       notes: map['notes'] as String?,
-      createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt'] as String) : DateTime.now(),
-      updatedAt: map['updatedAt'] != null ? DateTime.parse(map['updatedAt'] as String) : DateTime.now(),
+      createdAt: map['created_at'] != null ? DateTime.parse(map['created_at'] as String) : DateTime.now(),
+      updatedAt: map['updated_at'] != null ? DateTime.parse(map['updated_at'] as String) : DateTime.now(),
     );
   }
 
