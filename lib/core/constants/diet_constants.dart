@@ -119,9 +119,12 @@ class DietConstants {
 
   // 空腹有氧日：C=160g，1餐（有氧后正常吃）
   // 有氧后第一餐 11:00：C160 / P120 / F56
+
   static const List<Map<String, dynamic>> CARDIO_MEALS = [
-    {'meal_order': 1, 'meal_time': '11:00', 'carb': 160.0, 'protein': 120.0, 'fat': 56.0, 'is_pre_workout': false, 'is_post_workout': false},
+    {'meal_order': 1, 'meal_time': '11:00', 'carb': 60.0, 'protein': 40.0, 'fat': 20.0, 'is_pre_workout': false, 'is_post_workout': false},
+    {'meal_order': 2, 'meal_time': '17:00', 'carb': 100.0, 'protein': 80.0, 'fat': 36.0, 'is_pre_workout': false, 'is_post_workout': false},
   ];
+
 
   // 获取餐次配置
   static List<Map<String, dynamic>> getMealTemplatesForDayType(String dayType) {

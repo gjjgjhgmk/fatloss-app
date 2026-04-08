@@ -8,6 +8,7 @@ import '../../data/models/daily_review.dart';
 import '../../data/models/weekly_review.dart';
 import '../../data/models/weight_record.dart';
 import '../../data/models/waist_record.dart';
+import '../../data/models/workout_record.dart';
 
 class HiveHelper {
   static final HiveHelper instance = HiveHelper._init();
@@ -22,6 +23,7 @@ class HiveHelper {
   static const String weeklyReviewsBox = 'weekly_reviews';
   static const String weightRecordsBox = 'weight_records';
   static const String waistRecordsBox = 'waist_records';
+  static const String workoutRecordsBox = 'workout_records';
 
   HiveHelper._init();
 
@@ -38,6 +40,8 @@ class HiveHelper {
     Hive.registerAdapter(WeeklyReviewAdapter());
     Hive.registerAdapter(WeightRecordAdapter());
     Hive.registerAdapter(WaistRecordAdapter());
+    Hive.registerAdapter(WorkoutRecordAdapter());
+    Hive.registerAdapter(WorkoutExerciseAdapter());
 
     // Open boxes
     await Hive.openBox<DietRule>(dietRulesBox);
@@ -49,6 +53,7 @@ class HiveHelper {
     await Hive.openBox<WeeklyReview>(weeklyReviewsBox);
     await Hive.openBox<WeightRecord>(weightRecordsBox);
     await Hive.openBox<WaistRecord>(waistRecordsBox);
+    await Hive.openBox<WorkoutRecord>(workoutRecordsBox);
 
     // Seed initial data if empty
     await _seedDataIfNeeded();
@@ -63,6 +68,7 @@ class HiveHelper {
   Box<WeeklyReview> get weeklyReviewsBoxInstance => Hive.box<WeeklyReview>(weeklyReviewsBox);
   Box<WeightRecord> get weightRecordsBoxInstance => Hive.box<WeightRecord>(weightRecordsBox);
   Box<WaistRecord> get waistRecordsBoxInstance => Hive.box<WaistRecord>(waistRecordsBox);
+  Box<WorkoutRecord> get workoutRecordsBoxInstance => Hive.box<WorkoutRecord>(workoutRecordsBox);
 
   Future<void> _seedDataIfNeeded() async {
     // Seed diet rules if empty

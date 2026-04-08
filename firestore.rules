@@ -36,5 +36,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+
+    // 训练记录 - 公开只读
+    match /workout_records/{recordId} {
+      allow read: if true;
+      allow write: if false;
+    }
   }
 }

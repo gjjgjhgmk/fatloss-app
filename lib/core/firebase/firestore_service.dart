@@ -5,6 +5,7 @@ import '../../data/models/diet_rule.dart';
 import '../../data/models/weight_record.dart';
 import '../../data/models/waist_record.dart';
 import '../../data/models/ingredient.dart';
+import '../../data/models/workout_record.dart';
 
 class FirestoreService {
   static final FirestoreService _instance = FirestoreService._internal();
@@ -229,5 +230,31 @@ class FirestoreService {
         'records': records.map((r) => r.toMap()).toList(),
       };
     });
+  }
+
+  // ============ 训练记录 ============
+
+  Future<void> saveWorkoutRecord(WorkoutRecord record) async {
+    await _db.collection('workout_records').doc(record.id).set(record.toMap());
+  }
+
+  Future<List<WorkoutRecord>> getWorkoutRecords({int limit = 30}) async {
+    final snapshot = await _db
+        .collection('workout_records')
+        .orderBy('recordDate', descending: true)
+        .limit(limit)
+        .get();
+
+    return snapshot.docs.map((doc) {
+      return WorkoutRecord.fromMap(doc.data() as Map<String, dynamic>);
+    }).toList();
+  }
+
+  Stream<QuerySnapshot> watchWorkoutRecords() {
+    return _db
+        .collection('workout_records')
+        .orderBy('recordDate', descending: true)
+        .limit(30)
+        .snapshots();
   }
 }

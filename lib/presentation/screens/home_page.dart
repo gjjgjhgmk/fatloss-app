@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../../core/constants/workout_constants.dart';
 import '../../core/utils/nutrition_calculator.dart';
 import '../../core/utils/date_type_resolver.dart';
+import '../../data/models/workout_record.dart';
+import '../../data/repositories/workout_record_repository.dart';
 import '../../domain/usecases/daily_diet_manager.dart';
 import '../providers/diet_provider.dart';
+import '../providers/workout_provider.dart';
 import 'meal_record_page.dart';
 import 'review_page.dart';
 import 'weight_record_page.dart';
 import 'waist_record_page.dart';
 import 'ingredient_page.dart';
+import 'workout_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -19,6 +24,9 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  final WorkoutRecordRepository _workoutRepo = WorkoutRecordRepository();
+  final Map<String, WorkoutRecord?> _workoutCache = {};
+
   @override
   void initState() {
     super.initState();
@@ -30,26 +38,13 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('碳循环减脂'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.restaurant_menu),
-            onPressed: () => _navigateToIngredients(context),
-            tooltip: '食材库',
-          ),
-          IconButton(
-            icon: const Icon(Icons.bar_chart),
-            onPressed: () => _navigateToReview(context),
-            tooltip: '复盘',
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFF0D1117), // 深色背景
       body: Consumer<DietProvider>(
         builder: (context, provider, child) {
           if (provider.isLoading) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF00D9FF)),
+            );
           }
 
           if (provider.error != null) {
@@ -75,21 +70,15 @@ class _HomePageState extends State<HomePage> {
 
           return RefreshIndicator(
             onRefresh: () => provider.loadDailyStatus(),
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildDateHeader(context, provider, status),
-                  const SizedBox(height: 16),
-                  _buildQuickActions(context),
-                  const SizedBox(height: 16),
-                  _buildNutritionProgress(status),
-                  const SizedBox(height: 16),
-                  _buildMealList(context, provider, status),
-                ],
-              ),
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(child: _buildAppBar(context, provider)),
+                SliverToBoxAdapter(child: _buildMonthlyGoal(context, provider)),
+                SliverToBoxAdapter(child: _buildDayTypeSelector(context, provider)),
+                SliverToBoxAdapter(child: _buildNutritionProgress(status)),
+                SliverToBoxAdapter(child: _buildMealList(context, provider, status)),
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              ],
             ),
           );
         },
@@ -97,13 +86,22 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildDateHeader(BuildContext context, DietProvider provider, DailyDietStatus status) {
+  Widget _buildAppBar(BuildContext context, DietProvider provider) {
     final dateFormat = DateFormat('M月d日 E');
+    final status = provider.dailyStatus;
+    final dayColor = Color(WorkoutConstants.DAY_TYPE_COLORS[status?.dayType ?? 'rest'] ?? 0xFF9E9E9E);
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            dayColor.withOpacity(0.3),
+            const Color(0xFF0D1117),
+          ],
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -111,53 +109,273 @@ class _HomePageState extends State<HomePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                dateFormat.format(provider.selectedDate),
-                style: Theme.of(context).textTheme.titleLarge,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '碳循环减脂',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: dayColor,
+                      shadows: [
+                        Shadow(
+                          color: dayColor.withOpacity(0.5),
+                          blurRadius: 10,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    dateFormat.format(provider.selectedDate),
+                    style: const TextStyle(color: Colors.grey, fontSize: 14),
+                  ),
+                ],
               ),
               Row(
                 children: [
-                  TextButton(
-                    onPressed: () => _selectDate(context, provider),
-                    child: const Text('选择日期'),
+                  IconButton(
+                    icon: const Icon(Icons.restaurant_menu, color: Colors.white70),
+                    onPressed: () => _navigateToIngredients(context),
+                    tooltip: '食材库',
                   ),
                   IconButton(
-                    icon: const Icon(Icons.edit_calendar),
-                    onPressed: () => _showDayTypeSettings(context, provider),
-                    tooltip: '设置训练日/有氧',
+                    icon: const Icon(Icons.bar_chart, color: Colors.white70),
+                    onPressed: () => _navigateToReview(context),
+                    tooltip: '复盘',
                   ),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
+          _buildDayTypeChips(context, provider, status),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDayTypeChips(BuildContext context, DietProvider provider, DailyDietStatus? status) {
+    final currentDayType = status?.dayType ?? 'rest';
+    final isCardio = DateTypeResolver.isCardioDay(provider.selectedDate);
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _buildDayTypeChip(
+          context,
+          '休息日',
+          'rest',
+          currentDayType == 'rest',
+          Colors.grey,
+          () => _navigateToWorkout(context, provider.selectedDate, 'rest'),
+        ),
+        _buildDayTypeChip(
+          context,
+          '练背日',
+          'back',
+          currentDayType == 'back',
+          const Color(0xFF1E88E5),
+          () => _navigateToWorkout(context, provider.selectedDate, 'back'),
+        ),
+        _buildDayTypeChip(
+          context,
+          '练胸日',
+          'chest',
+          currentDayType == 'chest',
+          const Color(0xFFE53935),
+          () => _navigateToWorkout(context, provider.selectedDate, 'chest'),
+        ),
+        _buildDayTypeChip(
+          context,
+          '练腿日',
+          'leg',
+          currentDayType == 'leg',
+          const Color(0xFF43A047),
+          () => _navigateToWorkout(context, provider.selectedDate, 'leg'),
+        ),
+        _buildDayTypeChip(
+          context,
+          '练肩日',
+          'shoulder',
+          currentDayType == 'shoulder',
+          const Color(0xFFFF9800),
+          () => _navigateToWorkout(context, provider.selectedDate, 'shoulder'),
+        ),
+        _buildDayTypeChip(
+          context,
+          '空腹有氧',
+          'cardio',
+          isCardio,
+          const Color(0xFFE91E63),
+          () => _navigateToWorkout(context, provider.selectedDate, 'cardio'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDayTypeChip(
+    BuildContext context,
+    String label,
+    String dayType,
+    bool isSelected,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? color : color.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? color : color.withOpacity(0.5),
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withOpacity(0.4),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : color,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMonthlyGoal(BuildContext context, DietProvider provider) {
+    // 获取最新体重
+    final latestWeight = _getLatestWeight();
+    final startWeight = WorkoutConstants.APRIL_START_WEIGHT;
+    final goalWeight = WorkoutConstants.APRIL_GOAL_WEIGHT;
+
+    double weightLoss = startWeight - latestWeight;
+    double totalGoal = startWeight - goalWeight;
+    double progress = totalGoal > 0 ? (weightLoss / totalGoal).clamp(0.0, 1.0) : 0.0;
+    double remaining = goalWeight - latestWeight;
+
+    Color progressColor;
+    if (progress < 0.5) {
+      progressColor = Colors.red;
+    } else if (progress < 0.8) {
+      progressColor = Colors.orange;
+    } else {
+      progressColor = Colors.green;
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF1A1F35),
+            const Color(0xFF0D1117),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: progressColor.withOpacity(0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: progressColor.withOpacity(0.2),
+            blurRadius: 15,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  status.dayTypeName,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              const Text(
+                '四月目标',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
                 ),
               ),
-              if (DateTypeResolver.isCardioDay(provider.selectedDate)) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.orange,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Text(
-                    '空腹有氧',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: progressColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              ],
+                child: Text(
+                  remaining > 0 ? '还剩 ${remaining.toStringAsFixed(1)}kg' : '已达成!',
+                  style: TextStyle(color: progressColor, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Text(
+                '${latestWeight.toStringAsFixed(1)}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 42,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Text(
+                ' kg',
+                style: TextStyle(color: Colors.grey, fontSize: 18),
+              ),
+              const Spacer(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${startWeight.toStringAsFixed(0)} → ${goalWeight.toStringAsFixed(0)} kg',
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  Text(
+                    '-${weightLoss.toStringAsFixed(1)} kg',
+                    style: TextStyle(color: progressColor, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 12,
+              backgroundColor: Colors.grey[800],
+              valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('0%', style: TextStyle(color: Colors.grey, fontSize: 10)),
+              Text(
+                '${(progress * 100).toInt()}%',
+                style: TextStyle(color: progressColor, fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              const Text('100%', style: TextStyle(color: Colors.grey, fontSize: 10)),
             ],
           ),
         ],
@@ -165,128 +383,141 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildQuickActions(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _buildQuickActionButton(
-          context,
-          Icons.monitor_weight,
-          '体重打卡',
-          Colors.blue,
-          () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const WeightRecordPage()),
-          ),
-        ),
-        _buildQuickActionButton(
-          context,
-          Icons.straighten,
-          '腰围记录',
-          Colors.purple,
-          () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const WaistRecordPage()),
-          ),
-        ),
-        _buildQuickActionButton(
-          context,
-          Icons.restaurant,
-          '食材库',
-          Colors.green,
-          () => _navigateToIngredients(context),
-        ),
-      ],
-    );
+  double _getLatestWeight() {
+    // 尝试从 provider 获取最新体重，如果没有则用起始体重
+    // 这里简化处理，实际可以从 WeightRecordRepository 获取
+    return WorkoutConstants.APRIL_START_WEIGHT;
   }
 
-  Widget _buildQuickActionButton(
-    BuildContext context,
-    IconData icon,
-    String label,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 4),
-            Text(label, style: TextStyle(color: color, fontSize: 12)),
-          ],
-        ),
+  Widget _buildDayTypeSelector(BuildContext context, DietProvider provider) {
+    final status = provider.dailyStatus;
+    if (status == null) return const SizedBox();
+
+    final dayColor = Color(WorkoutConstants.DAY_TYPE_COLORS[status.dayType] ?? 0xFF9E9E9E);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1F35),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: dayColor.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: dayColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              IconData(WorkoutConstants.DAY_TYPE_ICONS[status.dayType] ?? 0xe5c4, fontFamily: 'MaterialIcons'),
+              color: dayColor,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  status.dayTypeName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (DateTypeResolver.isCardioDay(provider.selectedDate))
+                  const Text(
+                    '空腹有氧日',
+                    style: TextStyle(color: Colors.orange, fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () => _navigateToWorkout(context, provider.selectedDate, status.dayType),
+            style: TextButton.styleFrom(
+              backgroundColor: dayColor.withOpacity(0.2),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.fitness_center, color: dayColor, size: 18),
+                const SizedBox(width: 4),
+                Text(
+                  '运动打卡',
+                  style: TextStyle(color: dayColor),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildNutritionProgress(DailyDietStatus status) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '营养素进度',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 16),
-        _buildProgressRow(
-          '碳水',
-          status.totalActual.carb,
-          status.plannedCarb,
-          status.carbProgress,
-          NutritionCalculator.getComplianceColor(status.complianceStatus['carb']!),
-        ),
-        const SizedBox(height: 12),
-        _buildProgressRow(
-          '蛋白质',
-          status.totalActual.protein,
-          status.plannedProtein,
-          status.proteinProgress,
-          NutritionCalculator.getComplianceColor(status.complianceStatus['protein']!),
-        ),
-        const SizedBox(height: 12),
-        _buildProgressRow(
-          '脂肪',
-          status.totalActual.fat,
-          status.plannedFat,
-          status.fatProgress,
-          NutritionCalculator.getComplianceColor(status.complianceStatus['fat']!),
-        ),
-      ],
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1F35),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.pie_chart, color: Color(0xFF00D9FF), size: 20),
+              SizedBox(width: 8),
+              Text(
+                '营养素进度',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildNutritionBar('碳水', status.totalActual.carb, status.plannedCarb, Colors.orange),
+          const SizedBox(height: 12),
+          _buildNutritionBar('蛋白质', status.totalActual.protein, status.plannedProtein, Colors.red),
+          const SizedBox(height: 12),
+          _buildNutritionBar('脂肪', status.totalActual.fat, status.plannedFat, Colors.blue),
+        ],
+      ),
     );
   }
 
-  Widget _buildProgressRow(String label, double actual, double planned, double progress, int color) {
-    final percentage = (progress * 100).clamp(0, 200).toInt();
+  Widget _buildNutritionBar(String label, double actual, double planned, Color color) {
+    final progress = planned > 0 ? (actual / planned).clamp(0.0, 1.5) : 0.0;
+    final percentage = (progress * 100).toInt();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(fontSize: 16)),
+            Text(label, style: const TextStyle(color: Colors.white70)),
             Text(
               '${actual.toStringAsFixed(0)}/${planned.toStringAsFixed(0)}g  $percentage%',
-              style: TextStyle(fontSize: 14, color: Color(color)),
+              style: TextStyle(color: color, fontWeight: FontWeight.bold),
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: progress.clamp(0.0, 1.0),
-            backgroundColor: Colors.grey[300],
-            valueColor: AlwaysStoppedAnimation<Color>(Color(color)),
             minHeight: 8,
+            backgroundColor: Colors.grey[800],
+            valueColor: AlwaysStoppedAnimation<Color>(color),
           ),
         ),
       ],
@@ -294,45 +525,61 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildMealList(BuildContext context, DietProvider provider, DailyDietStatus status) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              '今日餐次 (${status.completedMeals}/${status.totalMeals})',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            if (status.skippedMeals > 0)
-              Text(
-                '已跳过${status.skippedMeals}餐',
-                style: const TextStyle(color: Colors.orange),
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.restaurant, color: Color(0xFF00D9FF), size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    '今日餐次 (${status.completedMeals}/${status.totalMeals})',
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
               ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        ...status.meals.map((meal) => _buildMealCard(context, provider, meal)),
-      ],
+              if (status.skippedMeals > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '已跳过${status.skippedMeals}餐',
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...status.meals.map((meal) => _buildMealCard(context, provider, meal)),
+        ],
+      ),
     );
   }
 
   Widget _buildMealCard(BuildContext context, DietProvider provider, meal) {
-    IconData statusIcon;
     Color statusColor;
+    IconData statusIcon;
     String statusText;
 
     if (meal.isSkipped) {
-      statusIcon = Icons.remove_circle_outline;
       statusColor = Colors.grey;
+      statusIcon = Icons.remove_circle_outline;
       statusText = '已跳过';
     } else if (meal.isCompleted) {
-      statusIcon = Icons.check_circle;
       statusColor = Colors.green;
+      statusIcon = Icons.check_circle;
       statusText = '已完成';
     } else {
+      statusColor = const Color(0xFF00D9FF);
       statusIcon = Icons.pending;
-      statusColor = Colors.grey;
       statusText = '待记录';
     }
 
@@ -340,66 +587,72 @@ class _HomePageState extends State<HomePage> {
     if (meal.isPreWorkout) mealLabel = '练前餐 ${meal.mealTime}';
     if (meal.isPostWorkout) mealLabel = '练后餐 ${meal.mealTime}';
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1F35),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: statusColor.withOpacity(0.3)),
+      ),
       child: InkWell(
         onTap: meal.isSkipped ? null : () => _navigateToMealRecord(context, meal.mealOrder),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Icon(statusIcon, color: statusColor, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        mealLabel,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      if (meal.hasPhoto) ...[
-                        const SizedBox(width: 8),
-                        const Icon(Icons.photo_camera, size: 16, color: Colors.green),
-                      ],
-                    ],
-                  ),
-                  Text(
-                    statusText,
-                    style: TextStyle(color: statusColor, fontSize: 14),
-                  ),
-                ],
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(statusIcon, color: statusColor, size: 24),
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _buildNutrientChip('碳水', meal.actualCarb, meal.plannedCarb),
-                  const SizedBox(width: 8),
-                  _buildNutrientChip('蛋白', meal.actualProtein, meal.plannedProtein),
-                  const SizedBox(width: 8),
-                  _buildNutrientChip('脂肪', meal.actualFat, meal.plannedFat),
-                ],
-              ),
-              if (!meal.isSkipped && !meal.isCompleted) ...[
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextButton(
-                      onPressed: () => _showSkipDialog(context, provider, meal.mealOrder),
-                      child: const Text('跳过'),
+                    Row(
+                      children: [
+                        Text(
+                          mealLabel,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        if (meal.hasPhoto) ...[
+                          const SizedBox(width: 8),
+                          const Icon(Icons.photo_camera, size: 16, color: Colors.green),
+                        ],
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () => _navigateToMealRecord(context, meal.mealOrder),
-                      child: const Text('记录'),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        _buildMiniChip('碳水', meal.actualCarb, Colors.orange),
+                        const SizedBox(width: 8),
+                        _buildMiniChip('蛋白', meal.actualProtein, Colors.red),
+                        const SizedBox(width: 8),
+                        _buildMiniChip('脂肪', meal.actualFat, Colors.blue),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
+              if (!meal.isSkipped && !meal.isCompleted)
+                ElevatedButton(
+                  onPressed: () => _navigateToMealRecord(context, meal.mealOrder),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00D9FF),
+                    foregroundColor: Colors.black,
+                  ),
+                  child: const Text('记录'),
+                ),
+              if (meal.isCompleted)
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.grey),
+                  onPressed: () => _navigateToMealRecord(context, meal.mealOrder),
+                ),
             ],
           ),
         ),
@@ -407,72 +660,25 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildNutrientChip(String label, double actual, double planned) {
+  Widget _buildMiniChip(String label, double value, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(8),
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
-        '$label: ${actual.toStringAsFixed(0)}/${planned.toStringAsFixed(0)}g',
-        style: const TextStyle(fontSize: 12),
+        '$label: ${value.toStringAsFixed(0)}g',
+        style: TextStyle(fontSize: 11, color: color),
       ),
     );
   }
 
-  Future<void> _selectDate(BuildContext context, DietProvider provider) async {
-    final date = await showDatePicker(
-      context: context,
-      initialDate: provider.selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (date != null) {
-      await provider.selectDate(date);
-    }
-  }
-
-  void _showDayTypeSettings(BuildContext context, DietProvider provider) {
-    final selectedDate = provider.selectedDate;
-    final isCardio = DateTypeResolver.isCardioDay(selectedDate);
-    final isRest = DateTypeResolver.isManualRestDay(selectedDate);
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('设置训练日'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SwitchListTile(
-              title: const Text('休息日'),
-              subtitle: const Text('跳过今日训练，训练计划顺延'),
-              value: isRest,
-              onChanged: (value) {
-                DateTypeResolver.setRestDay(selectedDate, value);
-                provider.loadDailyStatus();
-                Navigator.pop(context);
-              },
-            ),
-            SwitchListTile(
-              title: const Text('空腹有氧'),
-              subtitle: const Text('标记今天为空腹有氧日'),
-              value: isCardio,
-              onChanged: (value) {
-                DateTypeResolver.setCardioDay(selectedDate, value);
-                provider.loadDailyStatus();
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
-          ),
-        ],
+  void _navigateToWorkout(BuildContext context, DateTime date, String dayType) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => WorkoutPage(date: date, dayType: dayType),
       ),
     );
   }
@@ -500,29 +706,6 @@ class _HomePageState extends State<HomePage> {
       context,
       MaterialPageRoute(
         builder: (context) => const IngredientPage(),
-      ),
-    );
-  }
-
-  void _showSkipDialog(BuildContext context, DietProvider provider, int mealOrder) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('跳过餐次'),
-        content: const Text('确定要跳过这一餐吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              provider.skipMeal(mealOrder);
-              Navigator.pop(context);
-            },
-            child: const Text('确定跳过'),
-          ),
-        ],
       ),
     );
   }

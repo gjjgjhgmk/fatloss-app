@@ -6,6 +6,7 @@ import 'core/firebase/firebase_config.dart';
 import 'core/firebase/firestore_service.dart';
 import 'presentation/providers/diet_provider.dart';
 import 'presentation/providers/review_provider.dart';
+import 'presentation/providers/workout_provider.dart';
 import 'presentation/screens/home_page.dart';
 import 'presentation/screens/public_view_page.dart';
 
@@ -33,14 +34,15 @@ class CarbonCycleDietApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => DietProvider()),
         ChangeNotifierProvider(create: (_) => ReviewProvider()),
+        ChangeNotifierProvider(create: (_) => WorkoutProvider()),
       ],
       child: MaterialApp(
         title: '碳循环减脂',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.blue,
-            brightness: Brightness.light,
+            seedColor: const Color(0xFF00D9FF),
+            brightness: Brightness.dark,
           ),
           useMaterial3: true,
         ),
