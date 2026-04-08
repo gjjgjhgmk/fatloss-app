@@ -33,20 +33,9 @@ class HiveHelper {
     await Hive.initFlutter();
 
     // Register adapters (with safety check to prevent duplicate registration)
-    if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(DietRuleAdapter());
-    if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(MealTemplateAdapter());
-    if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(IngredientAdapter());
-    if (!Hive.isAdapterRegistered(3)) Hive.registerAdapter(DailyMealRecordAdapter());
-    if (!Hive.isAdapterRegistered(4)) Hive.registerAdapter(MealItemRecordAdapter());
-    if (!Hive.isAdapterRegistered(5)) Hive.registerAdapter(DailyReviewAdapter());
-    if (!Hive.isAdapterRegistered(6)) Hive.registerAdapter(WeeklyReviewAdapter());
-    if (!Hive.isAdapterRegistered(7)) Hive.registerAdapter(WeightRecordAdapter());
-    if (!Hive.isAdapterRegistered(8)) Hive.registerAdapter(WorkoutRecordAdapter());
-    if (!Hive.isAdapterRegistered(9)) Hive.registerAdapter(WorkoutExerciseAdapter());
-    if (!Hive.isAdapterRegistered(10)) Hive.registerAdapter(WaistRecordAdapter());
-    if (!Hive.isAdapterRegistered(11)) Hive.registerAdapter(AppSettingsAdapter());
+    ensureAdapterRegistered();
 
-    // Open boxes
+    // Open boxes - use typed boxes where possible
     await Hive.openBox<DietRule>(dietRulesBox);
     await Hive.openBox<MealTemplate>(mealTemplatesBox);
     await Hive.openBox<Ingredient>(ingredientsBox);
@@ -60,7 +49,7 @@ class HiveHelper {
     await Hive.openBox<AppSettings>(appSettingsBox);
 
     // Seed initial data if empty
-    await _seedDataIfNeeded();
+    await seedDataIfNeeded();
   }
 
   Box<DietRule> get dietRulesBoxInstance => Hive.box<DietRule>(dietRulesBox);
@@ -75,7 +64,24 @@ class HiveHelper {
   Box<WorkoutRecord> get workoutRecordsBoxInstance => Hive.box<WorkoutRecord>(workoutRecordsBox);
   Box<AppSettings> get appSettingsBoxInstance => Hive.box<AppSettings>(appSettingsBox);
 
-  Future<void> _seedDataIfNeeded() async {
+  /// 确保所有 adapter 已注册（安全调用，不会重复注册）
+  void ensureAdapterRegistered() {
+    if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(DietRuleAdapter());
+    if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(MealTemplateAdapter());
+    if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(IngredientAdapter());
+    if (!Hive.isAdapterRegistered(3)) Hive.registerAdapter(DailyMealRecordAdapter());
+    if (!Hive.isAdapterRegistered(4)) Hive.registerAdapter(MealItemRecordAdapter());
+    if (!Hive.isAdapterRegistered(5)) Hive.registerAdapter(DailyReviewAdapter());
+    if (!Hive.isAdapterRegistered(6)) Hive.registerAdapter(WeeklyReviewAdapter());
+    if (!Hive.isAdapterRegistered(7)) Hive.registerAdapter(WeightRecordAdapter());
+    if (!Hive.isAdapterRegistered(8)) Hive.registerAdapter(WorkoutRecordAdapter());
+    if (!Hive.isAdapterRegistered(9)) Hive.registerAdapter(WorkoutExerciseAdapter());
+    if (!Hive.isAdapterRegistered(10)) Hive.registerAdapter(WaistRecordAdapter());
+    if (!Hive.isAdapterRegistered(11)) Hive.registerAdapter(AppSettingsAdapter());
+  }
+
+  /// 公开的 seed 方法（main.dart 中调用）
+  Future<void> seedDataIfNeeded() async {
     // Seed diet rules if empty
     if (dietRulesBoxInstance.isEmpty) {
       await _seedDietRules();
