@@ -65,19 +65,32 @@ class HiveHelper {
   Box<AppSettings> get appSettingsBoxInstance => Hive.box<AppSettings>(appSettingsBox);
 
   /// 确保所有 adapter 已注册（安全调用，不会重复注册）
+  /// 使用 try-catch 防止 isAdapterRegistered 在 Web 端不可靠导致的问题
   void ensureAdapterRegistered() {
-    if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(DietRuleAdapter());
-    if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(MealTemplateAdapter());
-    if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(IngredientAdapter());
-    if (!Hive.isAdapterRegistered(3)) Hive.registerAdapter(DailyMealRecordAdapter());
-    if (!Hive.isAdapterRegistered(4)) Hive.registerAdapter(MealItemRecordAdapter());
-    if (!Hive.isAdapterRegistered(5)) Hive.registerAdapter(DailyReviewAdapter());
-    if (!Hive.isAdapterRegistered(6)) Hive.registerAdapter(WeeklyReviewAdapter());
-    if (!Hive.isAdapterRegistered(7)) Hive.registerAdapter(WeightRecordAdapter());
-    if (!Hive.isAdapterRegistered(8)) Hive.registerAdapter(WorkoutRecordAdapter());
-    if (!Hive.isAdapterRegistered(9)) Hive.registerAdapter(WorkoutExerciseAdapter());
-    if (!Hive.isAdapterRegistered(10)) Hive.registerAdapter(WaistRecordAdapter());
-    if (!Hive.isAdapterRegistered(11)) Hive.registerAdapter(AppSettingsAdapter());
+    _safeRegister(0, () => DietRuleAdapter());
+    _safeRegister(1, () => MealTemplateAdapter());
+    _safeRegister(2, () => IngredientAdapter());
+    _safeRegister(3, () => DailyMealRecordAdapter());
+    _safeRegister(4, () => MealItemRecordAdapter());
+    _safeRegister(5, () => DailyReviewAdapter());
+    _safeRegister(6, () => WeeklyReviewAdapter());
+    _safeRegister(7, () => WeightRecordAdapter());
+    _safeRegister(8, () => WorkoutRecordAdapter());
+    _safeRegister(9, () => WorkoutExerciseAdapter());
+    _safeRegister(10, () => WaistRecordAdapter());
+    _safeRegister(11, () => AppSettingsAdapter());
+  }
+
+  /// 安全注册 adapter，忽略已注册的异常
+  void _safeRegister(int typeId, TypeAdapter Function() adapterFactory) {
+    try {
+      Hive.registerAdapter(adapterFactory());
+    } catch (e) {
+      // 忽略 "already registered" 错误
+      if (!e.toString().contains('already')) {
+        print('[Hive] 注册 typeId $typeId 失败: $e');
+      }
+    }
   }
 
   /// 公开的 seed 方法（main.dart 中调用）

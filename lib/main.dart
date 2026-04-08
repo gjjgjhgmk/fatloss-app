@@ -58,12 +58,12 @@ Future<void> _initializeHiveWithMigration() async {
     print('[Hive] HiveHelper 初始化成功');
   } catch (error) {
     print('[Hive] HiveHelper 初始化失败: $error');
-    print('[Hive] 清除所有 Hive 数据并重试...');
+    print('[Hive] 关闭所有 box 并重试...');
 
     try {
-      // 清除所有 Hive 数据
-      await Hive.deleteFromDisk();
-      print('[Hive] Hive 数据已清除');
+      // 先关闭所有已打开的 box
+      await Hive.close();
+      print('[Hive] 所有 box 已关闭');
 
       // 重新初始化
       await Hive.initFlutter();
