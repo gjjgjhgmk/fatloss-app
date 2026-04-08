@@ -1,11 +1,10 @@
 import '../../core/database/hive_helper.dart';
-import '../../core/firebase/firestore_service.dart';
+import '../../core/supabase/supabase_config.dart';
 import '../../core/constants/workout_constants.dart';
 import '../models/workout_record.dart';
 
 class WorkoutRecordRepository {
   final HiveHelper _hiveHelper = HiveHelper.instance;
-  final FirestoreService _firestore = FirestoreService();
 
   /// 获取某日训练记录
   WorkoutRecord? getWorkoutRecord(String date, String dayType) {
@@ -46,9 +45,9 @@ class WorkoutRecordRepository {
   Future<void> saveWorkoutRecord(WorkoutRecord record) async {
     await _hiveHelper.workoutRecordsBoxInstance.put(record.id, record);
 
-    // 同步到 Firebase
+    // 同步到 Supabase
     try {
-      await _firestore.saveWorkoutRecord(record);
+      await SupabaseConfig.client.from('workout_records').upsert(record.toMap());
     } catch (_) {}
   }
 

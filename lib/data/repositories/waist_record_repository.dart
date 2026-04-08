@@ -1,10 +1,9 @@
 import '../../core/database/hive_helper.dart';
-import '../../core/firebase/firestore_service.dart';
+import '../../core/supabase/supabase_config.dart';
 import '../models/waist_record.dart';
 
 class WaistRecordRepository {
   final HiveHelper _hiveHelper = HiveHelper.instance;
-  final FirestoreService _firestore = FirestoreService();
 
   /// 获取某日腰围记录
   WaistRecord? getWaistRecordForDate(String date) {
@@ -14,9 +13,9 @@ class WaistRecordRepository {
   /// 保存腰围记录
   Future<void> saveWaistRecord(WaistRecord record) async {
     await _hiveHelper.waistRecordsBoxInstance.put(record.id, record);
-    // 同步到 Firebase
+    // 同步到 Supabase
     try {
-      await _firestore.saveWaistRecord(record);
+      await SupabaseConfig.client.from('waist_records').upsert(record.toMap());
     } catch (_) {}
   }
 

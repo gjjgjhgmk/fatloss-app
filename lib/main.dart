@@ -1,9 +1,8 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/database/hive_helper.dart';
-import 'core/firebase/firebase_config.dart';
-import 'core/firebase/firestore_service.dart';
+import 'core/supabase/supabase_config.dart';
+import 'core/supabase/sync_service.dart';
 import 'presentation/providers/diet_provider.dart';
 import 'presentation/providers/review_provider.dart';
 import 'presentation/providers/workout_provider.dart';
@@ -16,13 +15,13 @@ void main() async {
   // 初始化 Hive
   await HiveHelper.instance.initialize();
 
-  // 初始化 Firebase
-  await Firebase.initializeApp(options: FirebaseConfig.options);
-
-  // 初始化 Firestore 服务
-  await FirestoreService().initialize();
+  // 初始化 Supabase
+  await SupabaseConfig.initialize();
 
   runApp(const CarbonCycleDietApp());
+
+  // 后台静默同步（Fire and Forget）
+  SyncService().syncAllRecentData();
 }
 
 class CarbonCycleDietApp extends StatelessWidget {

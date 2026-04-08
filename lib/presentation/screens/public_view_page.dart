@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../core/firebase/firestore_service.dart';
+import '../../core/supabase/supabase_config.dart';
 import '../../core/utils/date_type_resolver.dart';
-import '../../data/models/daily_meal_record.dart';
 
 class PublicViewPage extends StatefulWidget {
   const PublicViewPage({super.key});
@@ -12,7 +11,6 @@ class PublicViewPage extends StatefulWidget {
 }
 
 class _PublicViewPageState extends State<PublicViewPage> {
-  final FirestoreService _firestore = FirestoreService();
   Map<String, dynamic>? _overview;
   bool _loading = true;
   String? _error;
@@ -30,11 +28,49 @@ class _PublicViewPageState extends State<PublicViewPage> {
     });
 
     try {
-      await _firestore.initialize();
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final data = await _firestore.getPublicTodayOverview(today);
+
+      // 并发请求多个表来组装数据
+      final results = await Future.wait([
+        SupabaseConfig.client.from('daily_meal_records').select().eq('recordDate', today),
+        SupabaseConfig.client.from('weight_records').select().order('recordDate', ascending: false).limit(1),
+        SupabaseConfig.client.from('waist_records').select().order('recordDate', ascending: false).limit(1),
+      ]);
+
+      final mealRecords = results[0] as List;
+      final weightRecords = results[1] as List;
+      final waistRecords = results[2] as List;
+
+      // 计算营养素总计
+      double totalCarb = 0, totalProtein = 0, totalFat = 0;
+      int completedMeals = 0;
+
+      for (final record in mealRecords) {
+        totalCarb += (record['actualCarb'] as num?)?.toDouble() ?? 0;
+        totalProtein += (record['actualProtein'] as num?)?.toDouble() ?? 0;
+        totalFat += (record['actualFat'] as num?)?.toDouble() ?? 0;
+        if (record['mealStatus'] == 'completed') completedMeals++;
+      }
+
+      final latestWeight = weightRecords.isNotEmpty
+          ? (weightRecords.first['weight'] as num?)?.toDouble()
+          : null;
+      final latestWaist = waistRecords.isNotEmpty
+          ? (waistRecords.first['waist'] as num?)?.toDouble()
+          : null;
+
       setState(() {
-        _overview = data;
+        _overview = {
+          'date': today,
+          'totalCarb': totalCarb,
+          'totalProtein': totalProtein,
+          'totalFat': totalFat,
+          'completedMeals': completedMeals,
+          'totalMeals': mealRecords.length,
+          'latestWeight': latestWeight,
+          'latestWaist': latestWaist,
+          'records': mealRecords,
+        };
         _loading = false;
       });
     } catch (e) {

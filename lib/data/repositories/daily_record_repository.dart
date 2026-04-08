@@ -1,6 +1,6 @@
 import 'package:uuid/uuid.dart';
 import '../../core/database/hive_helper.dart';
-import '../../core/firebase/firestore_service.dart';
+import '../../core/supabase/supabase_config.dart';
 import '../../core/utils/date_type_resolver.dart';
 import '../models/daily_meal_record.dart';
 import '../models/meal_item_record.dart';
@@ -8,7 +8,6 @@ import '../models/meal_item_record.dart';
 class DailyRecordRepository {
   final HiveHelper _hiveHelper = HiveHelper.instance;
   final _uuid = const Uuid();
-  final FirestoreService _firestore = FirestoreService();
 
   /// 获取某日所有餐次记录
   List<DailyMealRecord> getDailyRecords(String date) {
@@ -96,12 +95,10 @@ class DailyRecordRepository {
     final id = '${date}_$mealOrder';
     await updateMealStatus(id, 'skipped');
 
-    // 同步到 Firebase
+    // 同步到 Supabase
     final record = _hiveHelper.dailyMealRecordsBoxInstance.get(id);
     if (record != null) {
-      try {
-        await _firestore.saveDailyMealRecords([record]);
-      } catch (_) {}
+      await _syncToSupabase(record, []);
     }
   }
 
@@ -143,8 +140,8 @@ class DailyRecordRepository {
       );
       await _hiveHelper.dailyMealRecordsBoxInstance.put(dailyMealRecordId, updatedRecord);
 
-      // 同步到 Firebase
-      await _syncMealRecordToFirebase(updatedRecord, items);
+      // 同步到 Supabase
+      await _syncToSupabase(updatedRecord, items);
     }
   }
 
@@ -193,13 +190,17 @@ class DailyRecordRepository {
     return records;
   }
 
-  /// 同步餐次记录到 Firebase
-  Future<void> _syncMealRecordToFirebase(DailyMealRecord record, List<MealItemRecord> items) async {
+  /// 同步餐次记录到 Supabase
+  Future<void> _syncToSupabase(DailyMealRecord record, List<MealItemRecord> items) async {
     try {
-      await _firestore.saveDailyMealRecords([record]);
-      await _firestore.saveMealItemRecords(items);
+      await SupabaseConfig.client.from('daily_meal_records').upsert(record.toMap());
+      if (items.isNotEmpty) {
+        await SupabaseConfig.client.from('meal_item_records').upsert(
+          items.map((e) => e.toMap()).toList(),
+        );
+      }
     } catch (_) {
-      // Firebase 同步失败不影响本地操作
+      // Supabase 同步失败不影响本地操作
     }
   }
 }
