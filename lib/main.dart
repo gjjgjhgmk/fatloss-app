@@ -49,67 +49,38 @@ void main() async {
 Future<void> _initializeHiveWithMigration() async {
   await Hive.initFlutter();
 
-  // 尝试注册所有 adapter
+  // 注册所有 adapter
   _registerAdapters();
 
-  // 尝试打开 boxes，如果失败则清除旧数据重试
-  await _openBoxesWithMigration();
+  // 直接使用 HiveHelper 的 initialize，它会正确地打开所有 typed boxes
+  try {
+    await HiveHelper.instance.initialize();
+    print('[Hive] HiveHelper 初始化成功');
+  } catch (error) {
+    print('[Hive] HiveHelper 初始化失败: $error');
+    print('[Hive] 清除所有 Hive 数据并重试...');
 
-  // Seed initial data if empty
-  await HiveHelper.instance.seedDataIfNeeded();
+    try {
+      // 清除所有 Hive 数据
+      await Hive.deleteFromDisk();
+      print('[Hive] Hive 数据已清除');
+
+      // 重新初始化
+      await Hive.initFlutter();
+      _registerAdapters();
+      await HiveHelper.instance.initialize();
+      print('[Hive] 重试初始化成功');
+    } catch (retryError) {
+      print('[Hive] 重试也失败: $retryError');
+      rethrow;
+    }
+  }
 }
 
 void _registerAdapters() {
   // 所有 adapter 必须先注册才能打开 box
-  // 注意：如果 adapter 变化导致旧数据无法反序列化，openBox 会抛出异常
   final helper = HiveHelper.instance;
-  // 触发 adapter 注册（如果还没注册的话）
-  // 这些调用会确保 adapter 被注册
-  try {
-    helper.ensureAdapterRegistered();
-  } catch (e) {
-    print('[Hive] Adapter 注册异常: $e');
-  }
-}
-
-Future<void> _openBoxesWithMigration() async {
-  final boxNames = [
-    HiveHelper.dietRulesBox,
-    HiveHelper.mealTemplatesBox,
-    HiveHelper.ingredientsBox,
-    HiveHelper.dailyMealRecordsBox,
-    HiveHelper.mealItemRecordsBox,
-    HiveHelper.dailyReviewsBox,
-    HiveHelper.weeklyReviewsBox,
-    HiveHelper.weightRecordsBox,
-    HiveHelper.waistRecordsBox,
-    HiveHelper.workoutRecordsBox,
-    HiveHelper.appSettingsBox,
-  ];
-
-  for (final boxName in boxNames) {
-    try {
-      // 尝试直接打开 box
-      await Hive.openBox(boxName);
-      print('[Hive] Box [$boxName] 打开成功');
-    } catch (error) {
-      print('[Hive] Box [$boxName] 打开失败: $error');
-      print('[Hive] 尝试删除旧数据并重新创建...');
-
-      try {
-        // 删除损坏的 box
-        await Hive.deleteBoxFromDisk(boxName);
-        print('[Hive] Box [$boxName] 已删除');
-
-        // 重新打开
-        await Hive.openBox(boxName);
-        print('[Hive] Box [$boxName] 重新创建成功');
-      } catch (deleteError) {
-        print('[Hive] 删除 Box [$boxName] 失败: $deleteError');
-        // 继续尝试下一个 box
-      }
-    }
-  }
+  helper.ensureAdapterRegistered();
 }
 
 class ErrorApp extends StatelessWidget {
