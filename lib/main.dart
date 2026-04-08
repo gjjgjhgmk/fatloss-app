@@ -145,7 +145,7 @@ class ErrorApp extends StatelessWidget {
                   ),
                   child: SelectableText(
                     error,
-                    style: const TextStyle(color: Colors.red[300], fontSize: 12, fontFamily: 'monospace'),
+                    style: TextStyle(color: Colors.red.shade300, fontSize: 12, fontFamily: 'monospace'),
                   ),
                 ),
                 if (stackTrace.isNotEmpty) ...[
