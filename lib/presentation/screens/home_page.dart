@@ -2,13 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/workout_constants.dart';
-import '../../core/utils/nutrition_calculator.dart';
 import '../../core/utils/date_type_resolver.dart';
-import '../../data/models/workout_record.dart';
-import '../../data/repositories/workout_record_repository.dart';
+import '../../data/repositories/weight_record_repository.dart';
 import '../../domain/usecases/daily_diet_manager.dart';
 import '../providers/diet_provider.dart';
-import '../providers/workout_provider.dart';
 import 'meal_record_page.dart';
 import 'review_page.dart';
 import 'weight_record_page.dart';
@@ -24,8 +21,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final WorkoutRecordRepository _workoutRepo = WorkoutRecordRepository();
-  final Map<String, WorkoutRecord?> _workoutCache = {};
+  final WeightRecordRepository _weightRepo = WeightRecordRepository();
 
   @override
   void initState() {
@@ -135,6 +131,16 @@ class _HomePageState extends State<HomePage> {
               ),
               Row(
                 children: [
+                  IconButton(
+                    icon: const Icon(Icons.monitor_weight, color: Colors.white70),
+                    onPressed: () => _navigateToWeightRecord(context),
+                    tooltip: '体重记录',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.straighten, color: Colors.white70),
+                    onPressed: () => _navigateToWaistRecord(context),
+                    tooltip: '腰围记录',
+                  ),
                   IconButton(
                     icon: const Icon(Icons.restaurant_menu, color: Colors.white70),
                     onPressed: () => _navigateToIngredients(context),
@@ -367,9 +373,20 @@ class _HomePageState extends State<HomePage> {
   }
 
   double _getLatestWeight() {
-    // 尝试从 provider 获取最新体重，如果没有则用起始体重
-    // 这里简化处理，实际可以从 WeightRecordRepository 获取
-    return WorkoutConstants.APRIL_START_WEIGHT;
+    final records = _weightRepo.getAllWeightRecords();
+    if (records.isEmpty) {
+      return WorkoutConstants.APRIL_START_WEIGHT;
+    }
+
+    // 同一天优先取晚上体重，避免最新日期里随机取到早上/晚上。
+    final latestDate = records.first.recordDate;
+    final sameDateRecords = records.where((r) => r.recordDate == latestDate).toList()
+      ..sort((a, b) {
+        if (a.timeOfDay == b.timeOfDay) return 0;
+        return a.timeOfDay == 'evening' ? -1 : 1;
+      });
+
+    return sameDateRecords.first.weight;
   }
 
   Widget _buildDayTypeSelector(BuildContext context, DietProvider provider) {
@@ -596,20 +613,16 @@ class _HomePageState extends State<HomePage> {
   Widget _buildMealCard(BuildContext context, DietProvider provider, meal) {
     Color statusColor;
     IconData statusIcon;
-    String statusText;
 
     if (meal.isSkipped) {
       statusColor = Colors.grey;
       statusIcon = Icons.remove_circle_outline;
-      statusText = '已跳过';
     } else if (meal.isCompleted) {
       statusColor = Colors.green;
       statusIcon = Icons.check_circle;
-      statusText = '已完成';
     } else {
       statusColor = const Color(0xFF00D9FF);
       statusIcon = Icons.pending;
-      statusText = '待记录';
     }
 
     String mealLabel = '第${meal.mealOrder}餐 ${meal.mealTime}';
@@ -735,6 +748,24 @@ class _HomePageState extends State<HomePage> {
       context,
       MaterialPageRoute(
         builder: (context) => const IngredientPage(),
+      ),
+    );
+  }
+
+  void _navigateToWeightRecord(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const WeightRecordPage(),
+      ),
+    );
+  }
+
+  void _navigateToWaistRecord(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const WaistRecordPage(),
       ),
     );
   }

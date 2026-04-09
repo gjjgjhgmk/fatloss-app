@@ -31,31 +31,53 @@ class _PublicViewPageState extends State<PublicViewPage> {
     try {
       final today = DateTime.now();
       final todayStr = DateFormat('yyyy-MM-dd').format(today);
-      final dayType = DateTypeResolver.resolveDayType(today);
-      final isCardio = DateTypeResolver.isCardioDay(today);
+      final fallbackDayType = DateTypeResolver.resolveDayType(today);
+      bool isCardio = DateTypeResolver.isCardioDay(today);
 
       // 并发请求多个表来组装数据
       final results = await Future.wait([
-        SupabaseConfig.client.from('daily_meal_records').select().eq('recordDate', todayStr),
-        SupabaseConfig.client.from('weight_records').select().order('recordDate', ascending: false).limit(1),
-        SupabaseConfig.client.from('waist_records').select().order('recordDate', ascending: false).limit(1),
-        SupabaseConfig.client.from('workout_records').select().eq('recordDate', todayStr).eq('dayType', dayType),
+        SupabaseConfig.client
+            .from('daily_meal_records')
+            .select()
+            .eq('record_date', todayStr),
+        SupabaseConfig.client
+            .from('weight_records')
+            .select()
+            .order('record_date', ascending: false)
+            .limit(1),
+        SupabaseConfig.client
+            .from('waist_records')
+            .select()
+            .order('record_date', ascending: false)
+            .limit(1),
+        SupabaseConfig.client
+            .from('workout_records')
+            .select()
+            .eq('record_date', todayStr)
+            .limit(1),
       ]);
 
-      final mealRecords = results[0] as List;
-      final weightRecords = results[1] as List;
-      final waistRecords = results[2] as List;
-      final workoutRecords = results[3] as List;
+      final mealRecords = results[0] as List<dynamic>;
+      final weightRecords = results[1] as List<dynamic>;
+      final waistRecords = results[2] as List<dynamic>;
+      final workoutRecords = results[3] as List<dynamic>;
+
+      String dayType = fallbackDayType;
+      if (workoutRecords.isNotEmpty) {
+        dayType = workoutRecords.first['day_type'] as String? ?? fallbackDayType;
+      } else if (mealRecords.isNotEmpty) {
+        dayType = mealRecords.first['day_type'] as String? ?? fallbackDayType;
+      }
 
       // 计算营养素总计
       double totalCarb = 0, totalProtein = 0, totalFat = 0;
       int completedMeals = 0;
 
       for (final record in mealRecords) {
-        totalCarb += (record['actualCarb'] as num?)?.toDouble() ?? 0;
-        totalProtein += (record['actualProtein'] as num?)?.toDouble() ?? 0;
-        totalFat += (record['actualFat'] as num?)?.toDouble() ?? 0;
-        if (record['mealStatus'] == 'completed') completedMeals++;
+        totalCarb += (record['actual_carb'] as num?)?.toDouble() ?? 0;
+        totalProtein += (record['actual_protein'] as num?)?.toDouble() ?? 0;
+        totalFat += (record['actual_fat'] as num?)?.toDouble() ?? 0;
+        if (record['meal_status'] == 'completed') completedMeals++;
       }
 
       // 计算训练完成情况
@@ -65,6 +87,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
 
       if (workoutRecords.isNotEmpty) {
         final workout = workoutRecords.first;
+        isCardio = workout['has_cardio'] == true || workout['has_cardio'] == 1 || isCardio;
         final exercises = workout['exercises'] as List? ?? [];
         totalExercises = exercises.length;
         for (final ex in exercises) {
@@ -310,14 +333,14 @@ class _PublicViewPageState extends State<PublicViewPage> {
   }
 
   Widget _buildMealCard(Map<String, dynamic> record) {
-    final mealOrder = (record['mealOrder'] as num?)?.toInt() ?? 0;
-    final mealTime = (record['mealTime'] as String?) ?? '';
-    final actualCarb = (record['actualCarb'] as num?)?.toDouble() ?? 0;
-    final actualProtein = (record['actualProtein'] as num?)?.toDouble() ?? 0;
-    final actualFat = (record['actualFat'] as num?)?.toDouble() ?? 0;
-    final mealStatus = (record['mealStatus'] as String?) ?? 'pending';
-    final isPreWorkout = record['isPreWorkout'] == true || record['isPreWorkout'] == 1;
-    final isPostWorkout = record['isPostWorkout'] == true || record['isPostWorkout'] == 1;
+    final mealOrder = (record['meal_order'] as num?)?.toInt() ?? 0;
+    final mealTime = (record['meal_time'] as String?) ?? '';
+    final actualCarb = (record['actual_carb'] as num?)?.toDouble() ?? 0;
+    final actualProtein = (record['actual_protein'] as num?)?.toDouble() ?? 0;
+    final actualFat = (record['actual_fat'] as num?)?.toDouble() ?? 0;
+    final mealStatus = (record['meal_status'] as String?) ?? 'pending';
+    final isPreWorkout = record['is_pre_workout'] == true || record['is_pre_workout'] == 1;
+    final isPostWorkout = record['is_post_workout'] == true || record['is_post_workout'] == 1;
 
     String mealLabel = '第${mealOrder}餐 $mealTime';
     if (isPreWorkout) mealLabel = '练前餐 $mealTime';

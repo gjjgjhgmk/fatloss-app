@@ -86,8 +86,8 @@ class Ingredient extends HiveObject {
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {
+  Map<String, dynamic> toMap({bool includeRemainingAmount = true}) {
+    final Map<String, dynamic> map = {
       'id': id,
       'name': name,
       'category': category,
@@ -96,11 +96,17 @@ class Ingredient extends HiveObject {
       'fat_per_100g': fatPer100g,
       'is_cooked': isCooked,
       'is_common': isCommon,
-      'remaining_amount': remainingAmount,
       'unit': unit,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
+
+    // 兼容线上旧表结构：只有在需要时才同步库存字段。
+    if (includeRemainingAmount) {
+      map['remaining_amount'] = remainingAmount;
+    }
+
+    return map;
   }
 
   factory Ingredient.fromMap(Map<String, dynamic> map) {

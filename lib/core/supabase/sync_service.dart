@@ -4,6 +4,7 @@ import '../../data/repositories/weight_record_repository.dart';
 import '../../data/repositories/waist_record_repository.dart';
 import '../../data/repositories/workout_record_repository.dart';
 import '../../data/repositories/ingredient_repository.dart';
+import '../utils/date_type_resolver.dart';
 import 'supabase_config.dart';
 
 class SyncService {
@@ -115,7 +116,7 @@ class SyncService {
   Future<void> _syncTodayWorkoutRecords() async {
     try {
       final today = _formatDate(DateTime.now());
-      final dayType = _getDayType(today);
+      final dayType = DateTypeResolver.resolveDayType(DateTime.now());
       final record = _workoutRecordRepo.getWorkoutRecord(today, dayType);
 
       if (record == null) {
@@ -145,7 +146,9 @@ class SyncService {
       // 如果没有上次同步时间，则同步全部
       if (lastSyncTime == null) {
         await SupabaseConfig.client.from('ingredients').upsert(
-          allIngredients.map((i) => i.toMap()).toList(),
+          allIngredients
+              .map((i) => i.toMap(includeRemainingAmount: false))
+              .toList(),
         );
         print('🥗 已同步全部 ${allIngredients.length} 条食材');
         return;
@@ -155,7 +158,9 @@ class SyncService {
       final lastSync = DateTime.tryParse(lastSyncTime);
       if (lastSync == null) {
         await SupabaseConfig.client.from('ingredients').upsert(
-          allIngredients.map((i) => i.toMap()).toList(),
+          allIngredients
+              .map((i) => i.toMap(includeRemainingAmount: false))
+              .toList(),
         );
         print('🥗 已同步全部 ${allIngredients.length} 条食材');
         return;
@@ -163,7 +168,7 @@ class SyncService {
 
       // 只同步修改时间晚于上次同步的食材
       final modifiedIngredients = allIngredients.where((i) {
-        return i.updatedAt != null && i.updatedAt!.isAfter(lastSync);
+        return i.updatedAt.isAfter(lastSync);
       }).toList();
 
       if (modifiedIngredients.isEmpty) {
@@ -172,7 +177,9 @@ class SyncService {
       }
 
       await SupabaseConfig.client.from('ingredients').upsert(
-        modifiedIngredients.map((i) => i.toMap()).toList(),
+        modifiedIngredients
+            .map((i) => i.toMap(includeRemainingAmount: false))
+            .toList(),
       );
       print('🥗 已同步 ${modifiedIngredients.length} 条变更食材');
     } catch (e) {
@@ -255,14 +262,5 @@ class SyncService {
 
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
-
-  String _getDayType(String dateStr) {
-    // 根据日期判断训练日类型（与 DateTypeResolver 一致）
-    final date = DateTime.parse(dateStr);
-    final weekday = date.weekday;
-    // 周一=1, 周日=7
-    final types = ['back', 'chest', 'leg', 'back', 'chest', 'shoulder', 'rest'];
-    return types[weekday - 1];
   }
 }
