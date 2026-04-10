@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'core/database/hive_helper.dart';
@@ -38,7 +39,6 @@ void main() async {
 
     // 后台静默同步（Fire and Forget）
     SyncService().syncAllRecentData();
-
   } catch (error, stackTrace) {
     print('========================================');
     print('[FATAL ERROR] 应用初始化失败: $error');
@@ -46,7 +46,8 @@ void main() async {
     print('========================================');
 
     // 显示错误界面
-    runApp(ErrorApp(error: error.toString(), stackTrace: stackTrace.toString()));
+    runApp(
+        ErrorApp(error: error.toString(), stackTrace: stackTrace.toString()));
   }
 }
 
@@ -109,7 +110,10 @@ class ErrorApp extends StatelessWidget {
                 const SizedBox(height: 24),
                 const Text(
                   '应用初始化失败',
-                  style: TextStyle(color: Colors.red, fontSize: 24, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: Colors.red,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 Container(
@@ -121,7 +125,10 @@ class ErrorApp extends StatelessWidget {
                   ),
                   child: SelectableText(
                     error,
-                    style: TextStyle(color: Colors.red.shade300, fontSize: 12, fontFamily: 'monospace'),
+                    style: TextStyle(
+                        color: Colors.red.shade300,
+                        fontSize: 12,
+                        fontFamily: 'monospace'),
                   ),
                 ),
                 if (stackTrace.isNotEmpty) ...[
@@ -136,7 +143,10 @@ class ErrorApp extends StatelessWidget {
                     child: SingleChildScrollView(
                       child: SelectableText(
                         stackTrace,
-                        style: const TextStyle(color: Colors.grey, fontSize: 10, fontFamily: 'monospace'),
+                        style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 10,
+                            fontFamily: 'monospace'),
                       ),
                     ),
                   ),
@@ -152,7 +162,8 @@ class ErrorApp extends StatelessWidget {
                     // 清除所有 Hive 数据并重试
                     _resetAndRetry();
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                  style:
+                      ElevatedButton.styleFrom(backgroundColor: Colors.orange),
                   child: const Text('清除数据并重试'),
                 ),
               ],
@@ -178,6 +189,18 @@ class CarbonCycleDietApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final baseTheme = ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF0EA5A6),
+        brightness: Brightness.light,
+      ),
+    );
+    final textTheme = GoogleFonts.poppinsTextTheme(baseTheme.textTheme).apply(
+      bodyColor: const Color(0xFF111827),
+      displayColor: const Color(0xFF111827),
+    );
+
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => DietProvider()),
@@ -187,12 +210,28 @@ class CarbonCycleDietApp extends StatelessWidget {
       child: MaterialApp(
         title: '碳循环减脂',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF00D9FF),
-            brightness: Brightness.dark,
+        theme: baseTheme.copyWith(
+          scaffoldBackgroundColor: Colors.grey.shade50,
+          textTheme: textTheme,
+          appBarTheme: AppBarTheme(
+            backgroundColor: Colors.grey.shade50,
+            foregroundColor: const Color(0xFF111827),
+            elevation: 0,
+            surfaceTintColor: Colors.transparent,
+            titleTextStyle: textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          useMaterial3: true,
+          cardTheme: CardThemeData(
+            color: Colors.white,
+            elevation: 1,
+            shadowColor: Colors.black.withOpacity(0.06),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            margin: EdgeInsets.zero,
+          ),
+          dividerColor: Colors.grey.shade200,
         ),
         initialRoute: '/',
         routes: {

@@ -1,7 +1,8 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
@@ -161,7 +162,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
     final mealRaw = await SupabaseConfig.client
         .from('daily_meal_records')
         .select(
-            'id, meal_order, meal_time, meal_status, actual_carb, actual_protein, actual_fat, is_pre_workout, is_post_workout, photo_url, notes')
+            'id, meal_order, meal_time, meal_status, planned_carb, planned_protein, planned_fat, actual_carb, actual_protein, actual_fat, is_pre_workout, is_post_workout, photo_url, notes')
         .eq('record_date', todayStr)
         .order('meal_order', ascending: true);
 
@@ -199,6 +200,9 @@ class _PublicViewPageState extends State<PublicViewPage> {
         mealOrder: _toInt(row['meal_order']) ?? 0,
         mealTime: (row['meal_time'] as String?) ?? '',
         mealStatus: (row['meal_status'] as String?) ?? 'pending',
+        plannedCarb: _toDouble(row['planned_carb']) ?? 0,
+        plannedProtein: _toDouble(row['planned_protein']) ?? 0,
+        plannedFat: _toDouble(row['planned_fat']) ?? 0,
         actualCarb: _toDouble(row['actual_carb']) ?? 0,
         actualProtein: _toDouble(row['actual_protein']) ?? 0,
         actualFat: _toDouble(row['actual_fat']) ?? 0,
@@ -307,39 +311,306 @@ class _PublicViewPageState extends State<PublicViewPage> {
 
     return RefreshIndicator(
       onRefresh: _loadDashboard,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isTwoCol = constraints.maxWidth >= 820;
+          final isWide = constraints.maxWidth >= 1120;
+
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            children: [
+              _animateIn(
+                _buildNutritionOverviewCard(),
+                index: 0,
+              ),
+              const SizedBox(height: 16),
+              if (isTwoCol)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _animateIn(
+                        _buildChartPanel(
+                          title: '100天打卡热力图',
+                          subtitle: '绿色圆点表示有饮食或训练记录',
+                          child: _buildCalendarCard(),
+                        ),
+                        index: 1,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _animateIn(
+                        _buildChartPanel(
+                          title: '体重趋势图',
+                          subtitle: '最近14天平滑趋势',
+                          child: _buildWeightChartCard(),
+                        ),
+                        index: 2,
+                      ),
+                    ),
+                  ],
+                )
+              else ...[
+                _animateIn(
+                  _buildChartPanel(
+                    title: '100天打卡热力图',
+                    subtitle: '绿色圆点表示有饮食或训练记录',
+                    child: _buildCalendarCard(),
+                  ),
+                  index: 1,
+                ),
+                const SizedBox(height: 16),
+                _animateIn(
+                  _buildChartPanel(
+                    title: '体重趋势图',
+                    subtitle: '最近14天平滑趋势',
+                    child: _buildWeightChartCard(),
+                  ),
+                  index: 2,
+                ),
+              ],
+              const SizedBox(height: 16),
+              if (isWide)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 7,
+                      child: _buildMealFlowSection(startIndex: 3),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 5,
+                      child: _animateIn(
+                        _buildWorkoutSection(),
+                        index: 4,
+                      ),
+                    ),
+                  ],
+                )
+              else ...[
+                _buildMealFlowSection(startIndex: 3),
+                const SizedBox(height: 16),
+                _animateIn(
+                  _buildWorkoutSection(),
+                  index: 4,
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _animateIn(Widget child, {required int index}) {
+    return child
+        .animate()
+        .fade(
+          duration: 500.ms,
+          delay: (index * 90).ms,
+        )
+        .slideY(
+          begin: 0.05,
+          end: 0,
+          duration: 500.ms,
+          curve: Curves.easeOutCubic,
+        );
+  }
+
+  _MacroSummary _buildMacroSummary() {
+    double plannedCarb = 0;
+    double plannedProtein = 0;
+    double plannedFat = 0;
+    double actualCarb = 0;
+    double actualProtein = 0;
+    double actualFat = 0;
+
+    for (final meal in _todayMeals) {
+      plannedCarb += meal.plannedCarb;
+      plannedProtein += meal.plannedProtein;
+      plannedFat += meal.plannedFat;
+      actualCarb += meal.actualCarb;
+      actualProtein += meal.actualProtein;
+      actualFat += meal.actualFat;
+    }
+
+    return _MacroSummary(
+      plannedCarb: plannedCarb,
+      plannedProtein: plannedProtein,
+      plannedFat: plannedFat,
+      actualCarb: actualCarb,
+      actualProtein: actualProtein,
+      actualFat: actualFat,
+    );
+  }
+
+  Widget _buildNutritionOverviewCard() {
+    final summary = _buildMacroSummary();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '今日三大营养素目标',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '图标旁展示目标与已摄入，便于快速对比',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _buildOverviewItem(
+                  icon: Icons.grain,
+                  label: '碳水',
+                  color: const Color(0xFFF59E0B),
+                  target: summary.plannedCarb,
+                  current: summary.actualCarb,
+                ),
+                _buildOverviewItem(
+                  icon: Icons.fitness_center,
+                  label: '蛋白',
+                  color: const Color(0xFFEF4444),
+                  target: summary.plannedProtein,
+                  current: summary.actualProtein,
+                ),
+                _buildOverviewItem(
+                  icon: Icons.opacity,
+                  label: '脂肪',
+                  color: const Color(0xFF3B82F6),
+                  target: summary.plannedFat,
+                  current: summary.actualFat,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverviewItem({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required double target,
+    required double current,
+  }) {
+    final progress = target > 0 ? (current / target).clamp(0.0, 1.5) : 0.0;
+
+    return Container(
+      width: 230,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
         children: [
-          _buildSectionTitle(
-            title: '100天打卡热力图',
-            subtitle: '有饮食或训练记录的日期会显示绿色打卡点',
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.16),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 18),
           ),
-          const SizedBox(height: 10),
-          _buildCalendarCard(),
-          const SizedBox(height: 20),
-          _buildSectionTitle(
-            title: '体重趋势图',
-            subtitle: '最近14天趋势（优先取晚间记录）',
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${current.toStringAsFixed(0)}g / ${target.toStringAsFixed(0)}g',
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(99),
+                  child: LinearProgressIndicator(
+                    value: progress > 1 ? 1 : progress,
+                    minHeight: 5,
+                    backgroundColor: Colors.white,
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-          _buildWeightChartCard(),
-          const SizedBox(height: 20),
-          _buildSectionTitle(
-            title: '今日餐食流',
-            subtitle: '点击卡片展开食材明细与营养素',
-          ),
-          const SizedBox(height: 10),
-          ..._buildTodayMealCards(),
-          const SizedBox(height: 20),
-          _buildSectionTitle(
-            title: '今日训练打卡',
-            subtitle: '展示训练内容与完成状态',
-          ),
-          const SizedBox(height: 10),
-          _buildWorkoutCard(),
         ],
       ),
+    );
+  }
+
+  Widget _buildChartPanel({
+    required String title,
+    required String subtitle,
+    required Widget child,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(title: title, subtitle: subtitle),
+        const SizedBox(height: 10),
+        child,
+      ],
+    );
+  }
+
+  Widget _buildMealFlowSection({required int startIndex}) {
+    final cards = _buildTodayMealCards();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(
+          title: '今日餐食流',
+          subtitle: '展开查看食材明细与营养结构',
+        ),
+        const SizedBox(height: 10),
+        for (int i = 0; i < cards.length; i++)
+          _animateIn(cards[i], index: startIndex + i),
+      ],
+    );
+  }
+
+  Widget _buildWorkoutSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(
+          title: '今日训练打卡',
+          subtitle: '动作完成度与训练备注',
+        ),
+        const SizedBox(height: 10),
+        _buildWorkoutCard(),
+      ],
     );
   }
 
@@ -365,8 +636,8 @@ class _PublicViewPageState extends State<PublicViewPage> {
 
   Widget _buildCalendarCard() {
     return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: TableCalendar<dynamic>(
@@ -453,8 +724,8 @@ class _PublicViewPageState extends State<PublicViewPage> {
     final chartMaxY = maxWeight + yPadding;
 
     return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
         child: Column(
@@ -593,8 +864,8 @@ class _PublicViewPageState extends State<PublicViewPage> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -756,8 +1027,8 @@ class _PublicViewPageState extends State<PublicViewPage> {
     final totalCount = workout.exercises.length;
 
     return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -989,6 +1260,24 @@ class _PublicViewPageState extends State<PublicViewPage> {
   }
 }
 
+class _MacroSummary {
+  final double plannedCarb;
+  final double plannedProtein;
+  final double plannedFat;
+  final double actualCarb;
+  final double actualProtein;
+  final double actualFat;
+
+  const _MacroSummary({
+    required this.plannedCarb,
+    required this.plannedProtein,
+    required this.plannedFat,
+    required this.actualCarb,
+    required this.actualProtein,
+    required this.actualFat,
+  });
+}
+
 class _WeightPoint {
   final DateTime date;
   final double weight;
@@ -1001,6 +1290,9 @@ class _MealCardData {
   final int mealOrder;
   final String mealTime;
   final String mealStatus;
+  final double plannedCarb;
+  final double plannedProtein;
+  final double plannedFat;
   final double actualCarb;
   final double actualProtein;
   final double actualFat;
@@ -1015,6 +1307,9 @@ class _MealCardData {
     required this.mealOrder,
     required this.mealTime,
     required this.mealStatus,
+    required this.plannedCarb,
+    required this.plannedProtein,
+    required this.plannedFat,
     required this.actualCarb,
     required this.actualProtein,
     required this.actualFat,
