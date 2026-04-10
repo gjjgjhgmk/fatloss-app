@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:hive/hive.dart';
 
 part 'workout_record.g.dart';
@@ -83,7 +84,7 @@ class WorkoutRecord extends HiveObject {
       'id': id,
       'record_date': recordDate,
       'day_type': dayType,
-      'exercises': exercises.map((e) => e.toMap()).toList(),
+      'exercises': jsonEncode(exercises.map((e) => e.toMap()).toList()),
       'is_completed': isCompleted ? 1 : 0,
       'photo_url': photoUrl,
       'notes': notes,
@@ -98,9 +99,7 @@ class WorkoutRecord extends HiveObject {
       id: map['id'] as String,
       recordDate: map['record_date'] as String,
       dayType: map['day_type'] as String,
-      exercises: (map['exercises'] as List)
-          .map((e) => WorkoutExercise.fromMap(e as Map<String, dynamic>))
-          .toList(),
+      exercises: _parseExercises(map['exercises']),
       isCompleted: _intToBool(map['is_completed']),
       photoUrl: map['photo_url'] as String?,
       notes: map['notes'] as String?,
@@ -118,6 +117,33 @@ class WorkoutRecord extends HiveObject {
     if (value is bool) return value;
     if (value is num) return value == 1;
     return false;
+  }
+
+  static List<WorkoutExercise> _parseExercises(dynamic raw) {
+    if (raw == null) return [];
+
+    if (raw is List) {
+      return raw
+          .whereType<Map>()
+          .map((e) => WorkoutExercise.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+
+    if (raw is String && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          return decoded
+              .whereType<Map>()
+              .map((e) => WorkoutExercise.fromMap(Map<String, dynamic>.from(e)))
+              .toList();
+        }
+      } catch (_) {
+        return [];
+      }
+    }
+
+    return [];
   }
 }
 

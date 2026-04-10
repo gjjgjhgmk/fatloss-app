@@ -59,7 +59,6 @@ class MealItemRecord extends HiveObject {
       'carb': carb,
       'protein': protein,
       'fat': fat,
-      'is_manual_input': isManualInput,
       'created_at': createdAt.toIso8601String(),
     };
   }

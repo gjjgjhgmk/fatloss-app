@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/supabase/supabase_config.dart';
@@ -88,10 +89,11 @@ class _PublicViewPageState extends State<PublicViewPage> {
       if (workoutRecords.isNotEmpty) {
         final workout = workoutRecords.first;
         isCardio = workout['has_cardio'] == true || workout['has_cardio'] == 1 || isCardio;
-        final exercises = workout['exercises'] as List? ?? [];
+        final exercises = _parseExercises(workout['exercises']);
         totalExercises = exercises.length;
         for (final ex in exercises) {
-          if (ex['isCompleted'] == true) {
+          final completed = ex['isCompleted'] == true || ex['isCompleted'] == 1;
+          if (completed) {
             completedExercises++;
             if (ex['name'] == '60min 爬坡') {
               cardioCompleted = true;
@@ -538,5 +540,26 @@ class _PublicViewPageState extends State<PublicViewPage> {
         ],
       ),
     );
+  }
+
+  List<Map<String, dynamic>> _parseExercises(dynamic raw) {
+    if (raw == null) return [];
+
+    if (raw is List) {
+      return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    }
+
+    if (raw is String && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          return decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        }
+      } catch (_) {
+        return [];
+      }
+    }
+
+    return [];
   }
 }

@@ -61,7 +61,6 @@ class WaistRecord extends HiveObject {
       'id': id,
       'record_date': recordDate,
       'waist': waist,
-      'record_time': recordTime,
       'notes': notes,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
