@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:http/http.dart' as http;
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:uuid/uuid.dart';
+
 import '../../data/models/ingredient.dart';
 import '../../data/repositories/ingredient_repository.dart';
 
@@ -14,9 +18,11 @@ class IngredientPage extends StatefulWidget {
 class _IngredientPageState extends State<IngredientPage> {
   final IngredientRepository _repo = IngredientRepository();
   final _uuid = const Uuid();
+
   List<Ingredient> _ingredients = [];
   String _searchKeyword = '';
   String _selectedCategory = 'all';
+  bool _isFetchingBarcode = false;
 
   @override
   void initState() {
@@ -43,7 +49,19 @@ class _IngredientPageState extends State<IngredientPage> {
         title: const Text('食材库管理'),
         actions: [
           IconButton(
+            icon: _isFetchingBarcode
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.qr_code_scanner),
+            tooltip: '扫码添加',
+            onPressed: _isFetchingBarcode ? null : _scanBarcodeAndAddIngredient,
+          ),
+          IconButton(
             icon: const Icon(Icons.add),
+            tooltip: '手动添加',
             onPressed: _showAddDialog,
           ),
         ],
@@ -126,7 +144,7 @@ class _IngredientPageState extends State<IngredientPage> {
           children: [
             const Icon(Icons.restaurant_menu, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
-            const Text('暂无食材，点击右上角添加'),
+            const Text('暂无食材，点右上角添加'),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _showAddDialog,
@@ -172,9 +190,9 @@ class _IngredientPageState extends State<IngredientPage> {
           ],
         ),
         subtitle: Text(
-          '每100g: ${ingredient.carbPer100g.toStringAsFixed(0)}c '
-          '${ingredient.proteinPer100g.toStringAsFixed(0)}p '
-          '${ingredient.fatPer100g.toStringAsFixed(0)}f',
+          '每100g: ${ingredient.carbPer100g.toStringAsFixed(1)}c '
+          '${ingredient.proteinPer100g.toStringAsFixed(1)}p '
+          '${ingredient.fatPer100g.toStringAsFixed(1)}f',
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -353,4 +371,186 @@ class _IngredientPageState extends State<IngredientPage> {
       ),
     );
   }
+
+  Future<void> _scanBarcodeAndAddIngredient() async {
+    setState(() {
+      _isFetchingBarcode = true;
+    });
+
+    try {
+      final barcode = await _scanBarcodeWithCamera();
+      if (barcode == null || barcode.isEmpty) return;
+
+      final food = await _fetchFoodFromOpenFoodFacts(barcode);
+      if (food == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('未查询到该条码对应食品')),
+        );
+        return;
+      }
+
+      final ingredient = Ingredient(
+        id: 'barcode_$barcode',
+        name: food.productName,
+        category: _inferCategory(
+          carb: food.carbPer100g,
+          protein: food.proteinPer100g,
+          fat: food.fatPer100g,
+        ),
+        carbPer100g: food.carbPer100g,
+        proteinPer100g: food.proteinPer100g,
+        fatPer100g: food.fatPer100g,
+        isCommon: true,
+      );
+
+      await _repo.insertIngredient(ingredient);
+      _loadIngredients();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已扫码添加: ${ingredient.name}'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('扫码添加失败: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isFetchingBarcode = false;
+        });
+      }
+    }
+  }
+
+  Future<String?> _scanBarcodeWithCamera() async {
+    final controller = MobileScannerController(
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      facing: CameraFacing.back,
+    );
+
+    String? scannedCode;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return Dialog(
+          child: SizedBox(
+            width: 420,
+            height: 520,
+            child: Stack(
+              children: [
+                MobileScanner(
+                  controller: controller,
+                  onDetect: (capture) {
+                    if (scannedCode != null) return;
+                    final code = capture.barcodes.first.rawValue;
+                    if (code == null || code.trim().isEmpty) return;
+                    scannedCode = code.trim();
+                    Navigator.of(dialogContext).pop();
+                  },
+                ),
+                Align(
+                  alignment: Alignment.topRight,
+                  child: IconButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.black54,
+                    ),
+                  ),
+                ),
+                Center(
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 240,
+                      height: 240,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.white, width: 2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    await controller.dispose();
+    return scannedCode;
+  }
+
+  Future<_OpenFoodFactsProduct?> _fetchFoodFromOpenFoodFacts(
+    String barcode,
+  ) async {
+    final uri = Uri.parse(
+      'https://world.openfoodfacts.org/api/v0/product/$barcode.json',
+    );
+    final response = await http.get(uri);
+    if (response.statusCode != 200) return null;
+
+    final body = jsonDecode(response.body);
+    if (body is! Map<String, dynamic>) return null;
+    final status = body['status'];
+    if (status is! num || status.toInt() != 1) return null;
+
+    final product = body['product'];
+    if (product is! Map) return null;
+    final productMap = Map<String, dynamic>.from(product);
+
+    final nutrimentsRaw = productMap['nutriments'];
+    final nutriments = nutrimentsRaw is Map
+        ? Map<String, dynamic>.from(nutrimentsRaw)
+        : <String, dynamic>{};
+
+    final productName = (productMap['product_name'] as String?)?.trim() ??
+        (productMap['product_name_zh'] as String?)?.trim() ??
+        '';
+    if (productName.isEmpty) return null;
+
+    return _OpenFoodFactsProduct(
+      productName: productName,
+      carbPer100g: _toDouble(nutriments['carbohydrates_100g']) ?? 0,
+      proteinPer100g: _toDouble(nutriments['proteins_100g']) ?? 0,
+      fatPer100g: _toDouble(nutriments['fat_100g']) ?? 0,
+    );
+  }
+
+  String _inferCategory({
+    required double carb,
+    required double protein,
+    required double fat,
+  }) {
+    if (protein >= carb && protein >= fat) return 'protein';
+    if (fat >= carb && fat >= protein) return 'fat';
+    return 'carb';
+  }
+
+  double? _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+}
+
+class _OpenFoodFactsProduct {
+  final String productName;
+  final double carbPer100g;
+  final double proteinPer100g;
+  final double fatPer100g;
+
+  const _OpenFoodFactsProduct({
+    required this.productName,
+    required this.carbPer100g,
+    required this.proteinPer100g,
+    required this.fatPer100g,
+  });
 }

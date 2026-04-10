@@ -1,4 +1,5 @@
 import '../../core/database/hive_helper.dart';
+import '../../core/supabase/supabase_config.dart';
 import '../models/ingredient.dart';
 
 class IngredientRepository {
@@ -29,14 +30,27 @@ class IngredientRepository {
 
   Future<void> insertIngredient(Ingredient ingredient) async {
     await _hiveHelper.ingredientsBoxInstance.put(ingredient.id, ingredient);
+    try {
+      await SupabaseConfig.client.from('ingredients').upsert(
+            ingredient.toMap(includeRemainingAmount: false),
+          );
+    } catch (_) {}
   }
 
   Future<void> updateIngredient(Ingredient ingredient) async {
     await _hiveHelper.ingredientsBoxInstance.put(ingredient.id, ingredient);
+    try {
+      await SupabaseConfig.client.from('ingredients').upsert(
+            ingredient.toMap(includeRemainingAmount: false),
+          );
+    } catch (_) {}
   }
 
   Future<void> deleteIngredient(String id) async {
     await _hiveHelper.ingredientsBoxInstance.delete(id);
+    try {
+      await SupabaseConfig.client.from('ingredients').delete().eq('id', id);
+    } catch (_) {}
   }
 
   List<Ingredient> searchIngredients(String keyword) {
