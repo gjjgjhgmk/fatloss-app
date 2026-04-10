@@ -22,22 +22,27 @@ class SyncService {
   final WorkoutRecordRepository _workoutRecordRepo = WorkoutRecordRepository();
   final IngredientRepository _ingredientRepo = IngredientRepository();
 
-  /// 冷启动先从云端拉取今天/最新数据，覆盖本地，保证多端一致
-  Future<void> pullTodayDataFromCloud() async {
+  /// 启动时从云端拉取当天关键数据并覆盖本地（云端优先）
+  Future<void> pullCloudDataToLocal({DateTime? targetDate}) async {
     try {
-      final today = _formatDate(DateTime.now());
+      final today = _formatDate(targetDate ?? DateTime.now());
       print('☁️ 开始从云端拉取数据...');
 
       await _pullTodayMealRecords(today);
       await _pullTodayWorkoutRecords(today);
-      await _pullLatestWeightRecords();
-      await _pullLatestWaistRecord();
+      await _pullTodayWeightRecords(today);
+      await _pullTodayWaistRecords(today);
 
       print('☁️ 云端数据拉取完成');
     } catch (e) {
       print('⚠️ 云端拉取失败: $e');
       // 静默处理，不阻塞启动
     }
+  }
+
+  /// 兼容旧方法名
+  Future<void> pullTodayDataFromCloud() async {
+    await pullCloudDataToLocal();
   }
 
   Future<void> _pullTodayMealRecords(String today) async {
@@ -112,23 +117,19 @@ class SyncService {
     }
   }
 
-  Future<void> _pullLatestWeightRecords() async {
-    final latestDateRows = await SupabaseConfig.client
-        .from('weight_records')
-        .select('record_date')
-        .order('record_date', ascending: false)
-        .limit(1);
-
+  Future<void> _pullTodayWeightRecords(String today) async {
     final weightBox = HiveHelper.instance.weightRecordsBoxInstance;
-    await weightBox.clear();
-
-    if (latestDateRows.isEmpty) return;
-    final latestDate = latestDateRows.first['record_date'] as String;
+    final localTodayRecords = weightBox.values
+        .where((r) => r.recordDate == today)
+        .toList();
+    for (final record in localTodayRecords) {
+      await weightBox.delete(record.id);
+    }
 
     final weightRows = await SupabaseConfig.client
         .from('weight_records')
         .select()
-        .eq('record_date', latestDate);
+        .eq('record_date', today);
 
     for (final row in weightRows) {
       final record = WeightRecord.fromMap(Map<String, dynamic>.from(row));
@@ -136,19 +137,23 @@ class SyncService {
     }
   }
 
-  Future<void> _pullLatestWaistRecord() async {
+  Future<void> _pullTodayWaistRecords(String today) async {
+    final waistBox = HiveHelper.instance.waistRecordsBoxInstance;
+    final localTodayRecords = waistBox.values
+        .where((r) => r.recordDate == today)
+        .toList();
+    for (final record in localTodayRecords) {
+      await waistBox.delete(record.id);
+    }
+
     final waistRows = await SupabaseConfig.client
         .from('waist_records')
         .select()
-        .order('record_date', ascending: false)
-        .limit(1);
-
-    final waistBox = HiveHelper.instance.waistRecordsBoxInstance;
-    await waistBox.clear();
-
-    if (waistRows.isEmpty) return;
-    final record = WaistRecord.fromMap(Map<String, dynamic>.from(waistRows.first));
-    await waistBox.put(record.id, record);
+        .eq('record_date', today);
+    for (final row in waistRows) {
+      final record = WaistRecord.fromMap(Map<String, dynamic>.from(row));
+      await waistBox.put(record.id, record);
+    }
   }
 
   /// 冷启动静默同步 - Fire and Forget

@@ -30,7 +30,7 @@ void main() async {
 
     // 冷启动先从云端拉取今日/最新数据，保证多端一致
     print('[初始化] 拉取云端数据...');
-    await SyncService().pullTodayDataFromCloud();
+    await SyncService().pullCloudDataToLocal();
     print('[初始化] 云端数据拉取完成');
 
     print('[初始化] 启动应用...');
