@@ -84,12 +84,12 @@ class WorkoutRecord extends HiveObject {
       'record_date': recordDate,
       'day_type': dayType,
       'exercises': exercises.map((e) => e.toMap()).toList(),
-      'is_completed': isCompleted,
+      'is_completed': isCompleted ? 1 : 0,
       'photo_url': photoUrl,
       'notes': notes,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
-      'has_cardio': hasCardio,
+      'has_cardio': hasCardio ? 1 : 0,
     };
   }
 
@@ -101,7 +101,7 @@ class WorkoutRecord extends HiveObject {
       exercises: (map['exercises'] as List)
           .map((e) => WorkoutExercise.fromMap(e as Map<String, dynamic>))
           .toList(),
-      isCompleted: map['is_completed'] == true || map['is_completed'] == 1,
+      isCompleted: _intToBool(map['is_completed']),
       photoUrl: map['photo_url'] as String?,
       notes: map['notes'] as String?,
       createdAt: map['created_at'] != null
@@ -110,8 +110,14 @@ class WorkoutRecord extends HiveObject {
       updatedAt: map['updated_at'] != null
           ? DateTime.parse(map['updated_at'] as String)
           : DateTime.now(),
-      hasCardio: map['has_cardio'] == true || map['has_cardio'] == 1,
+      hasCardio: _intToBool(map['has_cardio']),
     );
+  }
+
+  static bool _intToBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value == 1;
+    return false;
   }
 }
 

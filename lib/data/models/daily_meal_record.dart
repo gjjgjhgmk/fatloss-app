@@ -114,8 +114,8 @@ class DailyMealRecord extends HiveObject {
       'actual_fat': actualFat,
       'meal_status': mealStatus,
       'notes': notes,
-      'is_pre_workout': isPreWorkout,
-      'is_post_workout': isPostWorkout,
+      'is_pre_workout': isPreWorkout ? 1 : 0,
+      'is_post_workout': isPostWorkout ? 1 : 0,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
       'photo_url': photoUrl,
@@ -137,12 +137,18 @@ class DailyMealRecord extends HiveObject {
       actualFat: (map['actual_fat'] as num?)?.toDouble() ?? 0,
       mealStatus: map['meal_status'] as String? ?? 'pending',
       notes: map['notes'] as String?,
-      isPreWorkout: map['is_pre_workout'] == true || map['is_pre_workout'] == 1,
-      isPostWorkout: map['is_post_workout'] == true || map['is_post_workout'] == 1,
+      isPreWorkout: _intToBool(map['is_pre_workout']),
+      isPostWorkout: _intToBool(map['is_post_workout']),
       createdAt: map['created_at'] != null ? DateTime.parse(map['created_at'] as String) : DateTime.now(),
       updatedAt: map['updated_at'] != null ? DateTime.parse(map['updated_at'] as String) : DateTime.now(),
       photoUrl: map['photo_url'] as String?,
     );
+  }
+
+  static bool _intToBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value == 1;
+    return false;
   }
 
   DailyMealRecord copyWith({

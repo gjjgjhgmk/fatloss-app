@@ -255,7 +255,8 @@ class _HomePageState extends State<HomePage> {
     double weightLoss = startWeight - latestWeight;
     double totalGoal = startWeight - goalWeight;
     double progress = totalGoal > 0 ? (weightLoss / totalGoal).clamp(0.0, 1.0) : 0.0;
-    double remaining = goalWeight - latestWeight;
+    double remaining = latestWeight - goalWeight;
+    final bool isGoalAchieved = remaining <= 0;
 
     Color progressColor;
     if (progress < 0.5) {
@@ -308,7 +309,7 @@ class _HomePageState extends State<HomePage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  remaining > 0 ? '还剩 ${remaining.toStringAsFixed(1)}kg' : '已达成!',
+                  isGoalAchieved ? '已达成!' : '再接再励',
                   style: TextStyle(color: progressColor, fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               ),

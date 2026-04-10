@@ -94,11 +94,10 @@ class Ingredient extends HiveObject {
       'carb_per_100g': carbPer100g,
       'protein_per_100g': proteinPer100g,
       'fat_per_100g': fatPer100g,
-      'is_cooked': isCooked,
-      'is_common': isCommon,
+      'is_cooked': isCooked ? 1 : 0,
+      'is_common': isCommon ? 1 : 0,
       'unit': unit,
       'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
     };
 
     // 兼容线上旧表结构：只有在需要时才同步库存字段。
@@ -117,12 +116,18 @@ class Ingredient extends HiveObject {
       carbPer100g: (map['carb_per_100g'] as num).toDouble(),
       proteinPer100g: (map['protein_per_100g'] as num).toDouble(),
       fatPer100g: (map['fat_per_100g'] as num).toDouble(),
-      isCooked: map['is_cooked'] == true || map['is_cooked'] == 1,
-      isCommon: map['is_common'] == true || map['is_common'] == 1,
+      isCooked: _intToBool(map['is_cooked']),
+      isCommon: _intToBool(map['is_common']),
       remainingAmount: (map['remaining_amount'] as num?)?.toDouble(),
       unit: map['unit'] as String? ?? 'g',
       createdAt: map['created_at'] != null ? DateTime.parse(map['created_at'] as String) : DateTime.now(),
       updatedAt: map['updated_at'] != null ? DateTime.parse(map['updated_at'] as String) : DateTime.now(),
     );
+  }
+
+  static bool _intToBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value == 1;
+    return false;
   }
 }
