@@ -22,6 +22,7 @@ class PublicViewPage extends StatefulWidget {
 class _PublicViewPageState extends State<PublicViewPage> {
   static const String _editAuthKey = 'edit_auth_verified';
   static const String _editPassword = '417520Zzh';
+  static const double _chartCardHeight = 360;
 
   bool _loading = true;
   String? _error;
@@ -33,6 +34,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
   List<_WeightPoint> _weightPoints = <_WeightPoint>[];
   List<_MealCardData> _todayMeals = <_MealCardData>[];
   _WorkoutCardData? _todayWorkout;
+  _FastingWeightData? _todayFastingWeight;
   int _secretTapCount = 0;
   DateTime? _lastSecretTapAt;
 
@@ -55,6 +57,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
       final results = await Future.wait<dynamic>([
         _fetchMonthCheckins(currentMonth),
         _fetchWeightTrend(today, days: 14),
+        _fetchTodayFastingWeight(today),
         _fetchTodayMeals(today),
         _fetchTodayWorkout(today),
       ]);
@@ -64,8 +67,9 @@ class _PublicViewPageState extends State<PublicViewPage> {
       setState(() {
         _checkinDays = results[0] as Set<DateTime>;
         _weightPoints = results[1] as List<_WeightPoint>;
-        _todayMeals = results[2] as List<_MealCardData>;
-        _todayWorkout = results[3] as _WorkoutCardData?;
+        _todayFastingWeight = results[2] as _FastingWeightData?;
+        _todayMeals = results[3] as List<_MealCardData>;
+        _todayWorkout = results[4] as _WorkoutCardData?;
         _selectedDay = today;
         _loading = false;
       });
@@ -249,6 +253,141 @@ class _PublicViewPageState extends State<PublicViewPage> {
     );
   }
 
+  Future<_FastingWeightData?> _fetchTodayFastingWeight(DateTime today) async {
+    final todayStr = _formatDate(today);
+    final raw = await SupabaseConfig.client
+        .from('weight_records')
+        .select('weight, record_time, notes, updated_at, time_of_day')
+        .eq('record_date', todayStr)
+        .eq('time_of_day', 'morning')
+        .order('updated_at', ascending: false)
+        .limit(1);
+
+    final rows = _rows(raw);
+    if (rows.isEmpty) return null;
+
+    final row = rows.first;
+    final weight = _toDouble(row['weight']);
+    if (weight == null) return null;
+
+    return _FastingWeightData(
+      weight: weight,
+      recordTime: row['record_time'] as String?,
+      photoUrl: _extractPhotoUrl(row['notes'] as String?),
+    );
+  }
+
+  Future<_DailyHistoryData> _fetchHistoryForDate(DateTime day) async {
+    final dateStr = _formatDate(day);
+
+    final results = await Future.wait<dynamic>([
+      SupabaseConfig.client
+          .from('weight_records')
+          .select('weight, time_of_day, record_time, notes, updated_at')
+          .eq('record_date', dateStr)
+          .order('updated_at', ascending: false),
+      SupabaseConfig.client
+          .from('waist_records')
+          .select('waist, record_time, updated_at')
+          .eq('record_date', dateStr)
+          .order('updated_at', ascending: false)
+          .limit(1),
+      SupabaseConfig.client
+          .from('workout_records')
+          .select('day_type, is_completed, has_cardio, photo_url, notes')
+          .eq('record_date', dateStr)
+          .order('updated_at', ascending: false)
+          .limit(1),
+      SupabaseConfig.client
+          .from('daily_meal_records')
+          .select(
+              'meal_order, meal_time, meal_status, actual_carb, actual_protein, actual_fat, photo_url, notes')
+          .eq('record_date', dateStr)
+          .order('meal_order', ascending: true),
+    ]);
+
+    final weightRows = _rows(results[0]);
+    final waistRows = _rows(results[1]);
+    final workoutRows = _rows(results[2]);
+    final mealRows = _rows(results[3]);
+
+    final preferredWeight = _pickPreferredWeightRow(weightRows);
+    final weight =
+        preferredWeight == null ? null : _toDouble(preferredWeight['weight']);
+    final weightTimeOfDay = preferredWeight == null
+        ? null
+        : preferredWeight['time_of_day'] as String?;
+    final weightRecordTime = preferredWeight == null
+        ? null
+        : preferredWeight['record_time'] as String?;
+    final weightPhotoUrl = preferredWeight == null
+        ? null
+        : _extractPhotoUrl(preferredWeight['notes'] as String?);
+
+    final waistRow = waistRows.isEmpty ? null : waistRows.first;
+    final waist = waistRow == null ? null : _toDouble(waistRow['waist']);
+    final waistRecordTime =
+        waistRow == null ? null : waistRow['record_time'] as String?;
+
+    final workoutRow = workoutRows.isEmpty ? null : workoutRows.first;
+    final dayType = (workoutRow?['day_type'] as String?) ?? 'rest';
+    final workoutCompleted =
+        workoutRow == null ? false : _toBool(workoutRow['is_completed']);
+    final workoutHasCardio =
+        workoutRow == null ? false : _toBool(workoutRow['has_cardio']);
+    final workoutPhotoUrl = workoutRow?['photo_url'] as String?;
+    final workoutNotes = workoutRow?['notes'] as String?;
+
+    final meals = mealRows.map((row) {
+      return _HistoryMealData(
+        mealOrder: _toInt(row['meal_order']) ?? 0,
+        mealTime: (row['meal_time'] as String?) ?? '',
+        mealStatus: (row['meal_status'] as String?) ?? 'pending',
+        carb: _toDouble(row['actual_carb']) ?? 0,
+        protein: _toDouble(row['actual_protein']) ?? 0,
+        fat: _toDouble(row['actual_fat']) ?? 0,
+        photoUrl: row['photo_url'] as String?,
+        notes: row['notes'] as String?,
+      );
+    }).toList();
+
+    return _DailyHistoryData(
+      date: day,
+      weight: weight,
+      weightTimeOfDay: weightTimeOfDay,
+      weightRecordTime: weightRecordTime,
+      weightPhotoUrl: weightPhotoUrl,
+      waist: waist,
+      waistRecordTime: waistRecordTime,
+      workoutDayType: dayType,
+      workoutCompleted: workoutCompleted,
+      workoutHasCardio: workoutHasCardio,
+      workoutPhotoUrl: workoutPhotoUrl,
+      workoutNotes: workoutNotes,
+      meals: meals,
+    );
+  }
+
+  Map<String, dynamic>? _pickPreferredWeightRow(
+      List<Map<String, dynamic>> rows) {
+    if (rows.isEmpty) return null;
+    for (final row in rows) {
+      if ((row['time_of_day'] as String?) == 'morning') {
+        return row;
+      }
+    }
+    return rows.first;
+  }
+
+  String? _extractPhotoUrl(String? notes) {
+    if (notes == null || notes.trim().isEmpty) return null;
+    final value = notes.trim();
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+    return null;
+  }
+
   Future<void> _onMonthChanged(DateTime focusedDay) async {
     final month = _monthStart(focusedDay);
     setState(() {
@@ -264,6 +403,381 @@ class _PublicViewPageState extends State<PublicViewPage> {
     } catch (_) {
       // 月份切换的拉取失败不打断当前页面
     }
+  }
+
+  Future<void> _handleDaySelected(
+      DateTime selectedDay, DateTime focusedDay) async {
+    final picked = _dateOnly(selectedDay);
+    final today = _dateOnly(DateTime.now());
+
+    setState(() {
+      _selectedDay = picked;
+      _focusedMonth = _monthStart(focusedDay);
+    });
+
+    if (picked.isAfter(today)) {
+      await _showFutureDayDialog();
+      return;
+    }
+
+    if (picked.isBefore(today)) {
+      await _openHistoryForDay(picked);
+    }
+  }
+
+  Future<void> _showFutureDayDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('未来可期'),
+          content: const Text('希望那天我已经瘦了'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('收到'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _openHistoryForDay(DateTime day) async {
+    if (!mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return const Center(child: CircularProgressIndicator());
+      },
+    );
+
+    try {
+      final history = await _fetchHistoryForDate(day);
+      if (!mounted) return;
+
+      Navigator.of(context, rootNavigator: true).pop();
+      await _showHistorySheet(history);
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('加载历史失败: $e')),
+      );
+    }
+  }
+
+  Future<void> _showHistorySheet(_DailyHistoryData history) async {
+    if (!mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        final dateLabel = DateFormat('yyyy-MM-dd').format(history.date);
+        final dayTypeName =
+            DateTypeResolver.getDayTypeName(history.workoutDayType);
+        final statusText = history.workoutCompleted ? '已完成' : '未完成';
+        final statusColor =
+            history.workoutCompleted ? Colors.green : Colors.orange;
+
+        return SizedBox(
+          height: MediaQuery.of(sheetContext).size.height * 0.82,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                Text(
+                  '$dateLabel 历史记录',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _historyMetricTile(
+                        label: '体重',
+                        value: history.weight == null
+                            ? '无'
+                            : '${history.weight!.toStringAsFixed(1)} kg',
+                        subValue: history.weightTimeOfDay == null
+                            ? null
+                            : (history.weightTimeOfDay == 'morning'
+                                ? '空腹'
+                                : '晚间'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _historyMetricTile(
+                        label: '腰围',
+                        value: history.waist == null
+                            ? '无'
+                            : '${history.waist!.toStringAsFixed(1)} cm',
+                        subValue: history.waistRecordTime,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              dayTypeName,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withOpacity(0.14),
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                              child: Text(
+                                statusText,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            if (history.workoutHasCardio) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.pink.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(99),
+                                ),
+                                child: const Text(
+                                  '有氧',
+                                  style: TextStyle(
+                                    color: Colors.pink,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const Spacer(),
+                            _photoIconButton(
+                              label: '状态照片',
+                              photoUrl: history.weightPhotoUrl ??
+                                  history.workoutPhotoUrl,
+                            ),
+                          ],
+                        ),
+                        if ((history.workoutNotes ?? '').trim().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            history.workoutNotes!.trim(),
+                            style: TextStyle(color: Colors.grey.shade700),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '当日餐食记录',
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                if (history.meals.isEmpty)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        '当天无餐食记录',
+                        style: TextStyle(color: Colors.grey.shade700),
+                      ),
+                    ),
+                  )
+                else
+                  ...history.meals.map((meal) {
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '第${meal.mealOrder}餐 ${meal.mealTime}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _mealStatusText(meal.mealStatus),
+                                    style: TextStyle(
+                                      color: _mealStatusColor(meal.mealStatus),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${meal.carb.toStringAsFixed(0)}C / ${meal.protein.toStringAsFixed(0)}P / ${meal.fat.toStringAsFixed(0)}F',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            _photoIconButton(
+                              label: '餐食照片',
+                              photoUrl: meal.photoUrl,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _historyMetricTile({
+    required String label,
+    required String value,
+    String? subValue,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            if ((subValue ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                subValue!,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _photoIconButton({
+    required String label,
+    required String? photoUrl,
+  }) {
+    return IconButton(
+      tooltip: label,
+      onPressed: () => _showPhotoPreview(photoUrl, title: label),
+      icon: Icon(
+        Icons.photo_library_outlined,
+        color:
+            (photoUrl ?? '').isNotEmpty ? const Color(0xFF2563EB) : Colors.grey,
+      ),
+    );
+  }
+
+  Future<void> _showPhotoPreview(
+    String? photoUrl, {
+    required String title,
+  }) async {
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final hasPhoto = (photoUrl ?? '').trim().isNotEmpty;
+        return AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 360,
+            child: hasPhoto
+                ? InteractiveViewer(
+                    minScale: 0.8,
+                    maxScale: 4,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(
+                        photoUrl!,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text('图片加载失败'),
+                        ),
+                      ),
+                    ),
+                  )
+                : const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: Text('无')),
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -332,6 +846,11 @@ class _PublicViewPageState extends State<PublicViewPage> {
                 index: 0,
               ),
               const SizedBox(height: 16),
+              _animateIn(
+                _buildTodayFastingWeightCard(),
+                index: 1,
+              ),
+              const SizedBox(height: 16),
               if (isTwoCol)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -341,9 +860,12 @@ class _PublicViewPageState extends State<PublicViewPage> {
                         _buildChartPanel(
                           title: '100天打卡热力图',
                           subtitle: '绿色圆点表示有饮食或训练记录',
-                          child: _buildCalendarCard(),
+                          child: SizedBox(
+                            height: _chartCardHeight,
+                            child: _buildCalendarCard(),
+                          ),
                         ),
-                        index: 1,
+                        index: 2,
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -352,9 +874,12 @@ class _PublicViewPageState extends State<PublicViewPage> {
                         _buildChartPanel(
                           title: '体重趋势图',
                           subtitle: '最近14天平滑趋势',
-                          child: _buildWeightChartCard(),
+                          child: SizedBox(
+                            height: _chartCardHeight,
+                            child: _buildWeightChartCard(),
+                          ),
                         ),
-                        index: 2,
+                        index: 3,
                       ),
                     ),
                   ],
@@ -364,18 +889,24 @@ class _PublicViewPageState extends State<PublicViewPage> {
                   _buildChartPanel(
                     title: '100天打卡热力图',
                     subtitle: '绿色圆点表示有饮食或训练记录',
-                    child: _buildCalendarCard(),
+                    child: SizedBox(
+                      height: _chartCardHeight,
+                      child: _buildCalendarCard(),
+                    ),
                   ),
-                  index: 1,
+                  index: 2,
                 ),
                 const SizedBox(height: 16),
                 _animateIn(
                   _buildChartPanel(
                     title: '体重趋势图',
                     subtitle: '最近14天平滑趋势',
-                    child: _buildWeightChartCard(),
+                    child: SizedBox(
+                      height: _chartCardHeight,
+                      child: _buildWeightChartCard(),
+                    ),
                   ),
-                  index: 2,
+                  index: 3,
                 ),
               ],
               const SizedBox(height: 16),
@@ -385,24 +916,24 @@ class _PublicViewPageState extends State<PublicViewPage> {
                   children: [
                     Expanded(
                       flex: 7,
-                      child: _buildMealFlowSection(startIndex: 3),
+                      child: _buildMealFlowSection(startIndex: 4),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
                       flex: 5,
                       child: _animateIn(
                         _buildWorkoutSection(),
-                        index: 4,
+                        index: 5,
                       ),
                     ),
                   ],
                 )
               else ...[
-                _buildMealFlowSection(startIndex: 3),
+                _buildMealFlowSection(startIndex: 4),
                 const SizedBox(height: 16),
                 _animateIn(
                   _buildWorkoutSection(),
-                  index: 4,
+                  index: 5,
                 ),
               ],
               const SizedBox(height: 24),
@@ -683,6 +1214,80 @@ class _PublicViewPageState extends State<PublicViewPage> {
     );
   }
 
+  Widget _buildTodayFastingWeightCard() {
+    final fasting = _todayFastingWeight;
+    final hasRecord = fasting != null;
+    final hasPhoto = ((fasting?.photoUrl ?? '').trim().isNotEmpty);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.monitor_weight_outlined, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  '今日空腹体重',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (hasRecord) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    fasting.weight.toStringAsFixed(1),
+                    style: const TextStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 6),
+                    child: Text('kg', style: TextStyle(fontSize: 14)),
+                  ),
+                ],
+              ),
+              if ((fasting.recordTime ?? '').trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    '记录时间: ${fasting.recordTime}',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
+                ),
+            ] else ...[
+              Text(
+                '今日尚未记录',
+                style: TextStyle(color: Colors.grey.shade700),
+              ),
+            ],
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _showPhotoPreview(
+                fasting?.photoUrl,
+                title: '今日空腹体重照片',
+              ),
+              icon: Icon(
+                Icons.photo_library_outlined,
+                color: hasPhoto ? const Color(0xFF2563EB) : Colors.grey,
+              ),
+              label: Text(hasPhoto ? '查看记录照片' : '无照片记录'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildChartPanel({
     required String title,
     required String subtitle,
@@ -764,12 +1369,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
           eventLoader: (day) {
             return _checkinDays.contains(_dateOnly(day)) ? const [1] : const [];
           },
-          onDaySelected: (selectedDay, focusedDay) {
-            setState(() {
-              _selectedDay = _dateOnly(selectedDay);
-              _focusedMonth = _monthStart(focusedDay);
-            });
-          },
+          onDaySelected: _handleDaySelected,
           onPageChanged: _onMonthChanged,
           headerStyle: const HeaderStyle(
             formatButtonVisible: false,
@@ -1397,6 +1997,72 @@ class _WeightPoint {
   final double weight;
 
   const _WeightPoint({required this.date, required this.weight});
+}
+
+class _FastingWeightData {
+  final double weight;
+  final String? recordTime;
+  final String? photoUrl;
+
+  const _FastingWeightData({
+    required this.weight,
+    required this.recordTime,
+    required this.photoUrl,
+  });
+}
+
+class _DailyHistoryData {
+  final DateTime date;
+  final double? weight;
+  final String? weightTimeOfDay;
+  final String? weightRecordTime;
+  final String? weightPhotoUrl;
+  final double? waist;
+  final String? waistRecordTime;
+  final String workoutDayType;
+  final bool workoutCompleted;
+  final bool workoutHasCardio;
+  final String? workoutPhotoUrl;
+  final String? workoutNotes;
+  final List<_HistoryMealData> meals;
+
+  const _DailyHistoryData({
+    required this.date,
+    required this.weight,
+    required this.weightTimeOfDay,
+    required this.weightRecordTime,
+    required this.weightPhotoUrl,
+    required this.waist,
+    required this.waistRecordTime,
+    required this.workoutDayType,
+    required this.workoutCompleted,
+    required this.workoutHasCardio,
+    required this.workoutPhotoUrl,
+    required this.workoutNotes,
+    required this.meals,
+  });
+}
+
+class _HistoryMealData {
+  final int mealOrder;
+  final String mealTime;
+  final String mealStatus;
+  final double carb;
+  final double protein;
+  final double fat;
+  final String? photoUrl;
+  final String? notes;
+
+  const _HistoryMealData({
+    required this.mealOrder,
+    required this.mealTime,
+    required this.mealStatus,
+    required this.carb,
+    required this.protein,
+    required this.fat,
+    required this.photoUrl,
+    required this.notes,
+  });
 }
 
 class _MealCardData {
