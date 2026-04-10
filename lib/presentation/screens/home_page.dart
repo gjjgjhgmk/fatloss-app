@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/workout_constants.dart';
 import '../../core/utils/date_type_resolver.dart';
 import '../../data/repositories/weight_record_repository.dart';
@@ -14,25 +15,138 @@ import 'ingredient_page.dart';
 import 'workout_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final bool requireAuth;
+
+  const HomePage({super.key, this.requireAuth = true});
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
+  static const String _editAuthKey = 'edit_auth_verified';
+  static const String _editPassword = 'your-password-here';
+
   final WeightRecordRepository _weightRepo = WeightRecordRepository();
+  bool _isAuthChecking = true;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<DietProvider>().initialize();
+      _bootstrap();
     });
+  }
+
+  Future<void> _bootstrap() async {
+    if (widget.requireAuth) {
+      await _ensureEditAuth();
+    }
+
+    if (!mounted) return;
+    await context.read<DietProvider>().initialize();
+
+    if (!mounted) return;
+    setState(() {
+      _isAuthChecking = false;
+    });
+  }
+
+  Future<void> _ensureEditAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isVerified = prefs.getBool(_editAuthKey) ?? false;
+    if (isVerified) return;
+
+    final controller = TextEditingController();
+    String? errorText;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return PopScope(
+          canPop: false,
+          child: StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: const Text('请输入编辑密码'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      obscureText: true,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: '编辑密码',
+                        errorText: errorText,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onSubmitted: (_) async {
+                        await _verifyPassword(
+                          prefs: prefs,
+                          dialogContext: dialogContext,
+                          input: controller.text,
+                          onError: (msg) {
+                            setDialogState(() {
+                              errorText = msg;
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                actions: [
+                  ElevatedButton(
+                    onPressed: () async {
+                      await _verifyPassword(
+                        prefs: prefs,
+                        dialogContext: dialogContext,
+                        input: controller.text,
+                        onError: (msg) {
+                          setDialogState(() {
+                            errorText = msg;
+                          });
+                        },
+                      );
+                    },
+                    child: const Text('验证'),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _verifyPassword({
+    required SharedPreferences prefs,
+    required BuildContext dialogContext,
+    required String input,
+    required void Function(String msg) onError,
+  }) async {
+    if (input.trim() == _editPassword) {
+      await prefs.setBool(_editAuthKey, true);
+      if (mounted) Navigator.of(dialogContext).pop();
+      return;
+    }
+    onError('密码错误，请重试');
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isAuthChecking) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0D1117),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF00D9FF)),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF0D1117), // 深色背景
       body: Consumer<DietProvider>(

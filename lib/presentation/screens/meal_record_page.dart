@@ -1,7 +1,9 @@
-import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/supabase/supabase_config.dart';
 import '../../core/utils/nutrition_calculator.dart';
 import '../../data/models/ingredient.dart';
 import '../../data/models/meal_item_record.dart';
@@ -18,6 +20,8 @@ class MealRecordPage extends StatefulWidget {
 }
 
 class _MealRecordPageState extends State<MealRecordPage> {
+  static const String _imageBucket = 'IMAGE';
+
   final List<_SelectedItem> _selectedItems = [];
   final _searchController = TextEditingController();
   final _amountController = TextEditingController();
@@ -25,7 +29,8 @@ class _MealRecordPageState extends State<MealRecordPage> {
   final _dailyRecordRepo = DailyRecordRepository();
   String _selectedCategory = 'all';
   Ingredient? _selectedIngredient;
-  String? _photoBase64;
+  String? _photoUrl;
+  Uint8List? _photoPreviewBytes;
   final _uuid = const Uuid();
 
   @override
@@ -43,7 +48,7 @@ class _MealRecordPageState extends State<MealRecordPage> {
         title: Text('第${widget.mealOrder}餐记录'),
         actions: [
           IconButton(
-            icon: Icon(_photoBase64 != null ? Icons.photo : Icons.photo_camera),
+            icon: Icon(_photoUrl != null ? Icons.photo : Icons.photo_camera),
             onPressed: _takePhoto,
             tooltip: '拍照打卡',
           ),
@@ -73,7 +78,7 @@ class _MealRecordPageState extends State<MealRecordPage> {
               ),
 
               // 照片预览
-              if (_photoBase64 != null)
+              if (_photoUrl != null)
                 Container(
                   height: 120,
                   width: double.infinity,
@@ -81,7 +86,9 @@ class _MealRecordPageState extends State<MealRecordPage> {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     image: DecorationImage(
-                      image: MemoryImage(base64Decode(_photoBase64!)),
+                      image: _photoPreviewBytes != null
+                          ? MemoryImage(_photoPreviewBytes!)
+                          : NetworkImage(_photoUrl!) as ImageProvider,
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -92,7 +99,12 @@ class _MealRecordPageState extends State<MealRecordPage> {
                         right: 8,
                         child: IconButton(
                           icon: const Icon(Icons.close, color: Colors.white),
-                          onPressed: () => setState(() => _photoBase64 = null),
+                          onPressed: () {
+                            setState(() {
+                              _photoUrl = null;
+                              _photoPreviewBytes = null;
+                            });
+                          },
                           style: IconButton.styleFrom(
                             backgroundColor: Colors.black54,
                           ),
@@ -357,21 +369,45 @@ class _MealRecordPageState extends State<MealRecordPage> {
     );
   }
 
-  void _takePhoto() {
-    // Web环境下使用文件选择作为替代方案
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('拍照打卡'),
-        content: const Text('Web版本暂不支持直接拍照，您可以在保存后手动添加照片备注。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('确定'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _takePhoto() async {
+    final provider = context.read<DietProvider>();
+    final meal = provider.getMealRecord(widget.mealOrder);
+    if (meal == null) return;
+
+    try {
+      final picker = ImagePicker();
+      final file = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (file == null) return;
+
+      final bytes = await file.readAsBytes();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filePath = 'uploads/${meal.recordDate}_$timestamp.jpg';
+
+      await SupabaseConfig.client.storage
+          .from(_imageBucket)
+          .uploadBinary(filePath, bytes);
+
+      final publicUrl = SupabaseConfig.client.storage
+          .from(_imageBucket)
+          .getPublicUrl(filePath);
+
+      if (!mounted) return;
+      setState(() {
+        _photoUrl = publicUrl;
+        _photoPreviewBytes = bytes;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('图片上传成功')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('图片上传失败: $e')),
+      );
+    }
   }
 
   Widget _buildSaveButton(DietProvider provider) {
@@ -415,9 +451,9 @@ class _MealRecordPageState extends State<MealRecordPage> {
     await provider.recordMeal(mealOrder: widget.mealOrder, items: items);
 
     // 更新照片和备注
-    if (_photoBase64 != null || _notesController.text.isNotEmpty) {
+    if (_photoUrl != null || _notesController.text.isNotEmpty) {
       final updatedMeal = meal.copyWith(
-        photoUrl: _photoBase64,
+        photoUrl: _photoUrl,
         notes: _notesController.text.isNotEmpty ? _notesController.text : null,
         updatedAt: DateTime.now(),
       );

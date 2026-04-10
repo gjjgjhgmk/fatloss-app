@@ -28,6 +28,11 @@ void main() async {
     await SupabaseConfig.initialize();
     print('[初始化] Supabase 初始化完成');
 
+    // 冷启动先从云端拉取今日/最新数据，保证多端一致
+    print('[初始化] 拉取云端数据...');
+    await SyncService().pullTodayDataFromCloud();
+    print('[初始化] 云端数据拉取完成');
+
     print('[初始化] 启动应用...');
     runApp(const CarbonCycleDietApp());
 
@@ -191,7 +196,8 @@ class CarbonCycleDietApp extends StatelessWidget {
         ),
         initialRoute: '/',
         routes: {
-          '/': (context) => const HomePage(),
+          '/': (context) => const HomePage(requireAuth: true),
+          // 围观页保持公开访问，不做密码拦截
           '/public': (context) => const PublicViewPage(),
         },
       ),

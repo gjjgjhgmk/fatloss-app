@@ -17,6 +17,7 @@ dependencies:
   uuid: ^4.2.1
   supabase_flutter: ^2.5.0
   shared_preferences: ^2.2.2
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
