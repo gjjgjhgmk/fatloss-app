@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -542,8 +542,8 @@ class _PublicViewPageState extends State<PublicViewPage> {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            const Color(0xFF10B981).withValues(alpha: 0.35),
-                            const Color(0xFF10B981).withValues(alpha: 0.04),
+                            const Color(0xFF10B981).withOpacity(0.35),
+                            const Color(0xFF10B981).withOpacity(0.04),
                           ],
                         ),
                       ),
@@ -628,7 +628,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.12),
+                    color: statusColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(99),
                   ),
                   child: Text(
@@ -727,7 +727,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -769,7 +769,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: dayColor.withValues(alpha: 0.15),
+                    color: dayColor.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
@@ -784,7 +784,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: (workout.isCompleted ? Colors.green : Colors.orange)
-                        .withValues(alpha: 0.14),
+                        .withOpacity(0.14),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
@@ -801,7 +801,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.pink.withValues(alpha: 0.12),
+                      color: Colors.pink.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: const Text(
