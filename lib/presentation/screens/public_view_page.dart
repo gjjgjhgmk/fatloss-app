@@ -280,18 +280,32 @@ class _PublicViewPageState extends State<PublicViewPage> {
   Future<_DailyHistoryData> _fetchHistoryForDate(DateTime day) async {
     final dateStr = _formatDate(day);
 
+    Future<List<Map<String, dynamic>>> fetchWaistRows() async {
+      try {
+        final raw = await SupabaseConfig.client
+            .from('waist_records')
+            .select('waist, record_time')
+            .eq('record_date', dateStr)
+            .limit(1);
+        return _rows(raw);
+      } catch (_) {
+        // 兼容旧表结构：如果尚未添加 record_time 列，回退只查 waist。
+        final raw = await SupabaseConfig.client
+            .from('waist_records')
+            .select('waist')
+            .eq('record_date', dateStr)
+            .limit(1);
+        return _rows(raw);
+      }
+    }
+
     final results = await Future.wait<dynamic>([
       SupabaseConfig.client
           .from('weight_records')
           .select('weight, time_of_day, record_time, notes, updated_at')
           .eq('record_date', dateStr)
           .order('updated_at', ascending: false),
-      SupabaseConfig.client
-          .from('waist_records')
-          .select('waist, record_time, updated_at')
-          .eq('record_date', dateStr)
-          .order('updated_at', ascending: false)
-          .limit(1),
+      fetchWaistRows(),
       SupabaseConfig.client
           .from('workout_records')
           .select('day_type, is_completed, has_cardio, photo_url, notes')

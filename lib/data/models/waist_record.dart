@@ -61,6 +61,7 @@ class WaistRecord extends HiveObject {
       'id': id,
       'record_date': recordDate,
       'waist': waist,
+      'record_time': recordTime,
       'notes': notes,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
@@ -74,8 +75,12 @@ class WaistRecord extends HiveObject {
       waist: (map['waist'] as num).toDouble(),
       recordTime: map['record_time'] as String?,
       notes: map['notes'] as String?,
-      createdAt: map['created_at'] != null ? DateTime.parse(map['created_at'] as String) : DateTime.now(),
-      updatedAt: map['updated_at'] != null ? DateTime.parse(map['updated_at'] as String) : DateTime.now(),
+      createdAt: map['created_at'] != null
+          ? DateTime.parse(map['created_at'] as String)
+          : DateTime.now(),
+      updatedAt: map['updated_at'] != null
+          ? DateTime.parse(map['updated_at'] as String)
+          : DateTime.now(),
     );
   }
 }
