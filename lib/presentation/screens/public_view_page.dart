@@ -798,7 +798,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('100天蜕变专属仪表盘'),
+        title: const Text('木希の碳循环减脂计划'),
         centerTitle: true,
         actions: [
           IconButton(
