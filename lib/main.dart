@@ -200,6 +200,15 @@ class CarbonCycleDietApp extends StatelessWidget {
       bodyColor: const Color(0xFF111827),
       displayColor: const Color(0xFF111827),
     );
+    final cardTheme = baseTheme.cardTheme.copyWith(
+      color: Colors.white,
+      elevation: 1,
+      shadowColor: Colors.black.withOpacity(0.06),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      margin: EdgeInsets.zero,
+    );
 
     return MultiProvider(
       providers: [
@@ -222,15 +231,7 @@ class CarbonCycleDietApp extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          cardTheme: CardThemeData(
-            color: Colors.white,
-            elevation: 1,
-            shadowColor: Colors.black.withOpacity(0.06),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            margin: EdgeInsets.zero,
-          ),
+          cardTheme: cardTheme,
           dividerColor: Colors.grey.shade200,
         ),
         initialRoute: '/',
