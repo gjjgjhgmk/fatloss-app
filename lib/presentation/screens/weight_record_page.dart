@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import '../../core/supabase/supabase_config.dart';
 import '../../data/models/weight_record.dart';
 import '../../data/repositories/weight_record_repository.dart';
 
@@ -12,10 +13,13 @@ class WeightRecordPage extends StatefulWidget {
 }
 
 class _WeightRecordPageState extends State<WeightRecordPage> {
+  static const String _imageBucket = 'image';
+
   final WeightRecordRepository _repo = WeightRecordRepository();
   String _selectedDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
   WeightRecord? _morningRecord;
   WeightRecord? _eveningRecord;
+  String? _uploadingRecordId;
 
   @override
   void initState() {
@@ -86,6 +90,8 @@ class _WeightRecordPageState extends State<WeightRecordPage> {
   }
 
   Widget _buildWeightCard(String label, String timeOfDay, WeightRecord? record) {
+    final photoUrl = _extractPhotoUrl(record?.notes);
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -124,11 +130,43 @@ class _WeightRecordPageState extends State<WeightRecordPage> {
                     style: TextStyle(color: Colors.grey[600]),
                   ),
                 ),
+              if (photoUrl != null) ...[
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.network(
+                    photoUrl,
+                    height: 140,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      height: 140,
+                      color: Colors.grey[300],
+                      alignment: Alignment.center,
+                      child: const Text('图片加载失败'),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Center(
-                child: TextButton(
-                  onPressed: () => _showEditDialog(timeOfDay, record),
-                  child: const Text('修改'),
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton(
+                      onPressed: () => _showEditDialog(timeOfDay, record),
+                      child: const Text('修改'),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: _uploadingRecordId == record.id
+                          ? null
+                          : () => _uploadBodyPhoto(record),
+                      icon: const Icon(Icons.photo_camera, size: 16),
+                      label: Text(
+                        _uploadingRecordId == record.id ? '上传中...' : '图片打卡',
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ] else ...[
@@ -329,5 +367,64 @@ class _WeightRecordPageState extends State<WeightRecordPage> {
         ),
       ),
     );
+  }
+
+  String? _extractPhotoUrl(String? notes) {
+    if (notes == null || notes.isEmpty) return null;
+    final value = notes.trim();
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+    return null;
+  }
+
+  Future<void> _uploadBodyPhoto(WeightRecord record) async {
+    try {
+      setState(() {
+        _uploadingRecordId = record.id;
+      });
+
+      final picker = ImagePicker();
+      final file = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (file == null) return;
+
+      final bytes = await file.readAsBytes();
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final path = 'uploads/weight_${record.recordDate}_${record.timeOfDay}_$ts.jpg';
+
+      await SupabaseConfig.client.storage
+          .from(_imageBucket)
+          .uploadBinary(path, bytes);
+
+      final url = SupabaseConfig.client.storage
+          .from(_imageBucket)
+          .getPublicUrl(path);
+
+      final updated = record.copyWith(
+        notes: url,
+        updatedAt: DateTime.now(),
+      );
+      await _repo.saveWeightRecord(updated);
+      _loadRecords();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('体重打卡图片上传成功')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('图片上传失败: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploadingRecordId = null;
+        });
+      }
+    }
   }
 }

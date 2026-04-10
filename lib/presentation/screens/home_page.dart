@@ -25,7 +25,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   static const String _editAuthKey = 'edit_auth_verified';
-  static const String _editPassword = 'your-password-here';
+  static const String _editPassword = '417520Zzh';
 
   final WeightRecordRepository _weightRepo = WeightRecordRepository();
   bool _isAuthChecking = true;

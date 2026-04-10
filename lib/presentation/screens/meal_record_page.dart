@@ -20,7 +20,7 @@ class MealRecordPage extends StatefulWidget {
 }
 
 class _MealRecordPageState extends State<MealRecordPage> {
-  static const String _imageBucket = 'IMAGE';
+  static const String _imageBucket = 'image';
 
   final List<_SelectedItem> _selectedItems = [];
   final _searchController = TextEditingController();
@@ -31,6 +31,7 @@ class _MealRecordPageState extends State<MealRecordPage> {
   Ingredient? _selectedIngredient;
   String? _photoUrl;
   Uint8List? _photoPreviewBytes;
+  bool _isUploadingPhoto = false;
   final _uuid = const Uuid();
 
   @override
@@ -77,42 +78,7 @@ class _MealRecordPageState extends State<MealRecordPage> {
                 ),
               ),
 
-              // 照片预览
-              if (_photoUrl != null)
-                Container(
-                  height: 120,
-                  width: double.infinity,
-                  margin: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    image: DecorationImage(
-                      image: _photoPreviewBytes != null
-                          ? MemoryImage(_photoPreviewBytes!)
-                          : NetworkImage(_photoUrl!) as ImageProvider,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white),
-                          onPressed: () {
-                            setState(() {
-                              _photoUrl = null;
-                              _photoPreviewBytes = null;
-                            });
-                          },
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.black54,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              _buildPhotoCheckinArea(),
 
               // 已选食材
               if (_selectedItems.isNotEmpty)
@@ -211,6 +177,77 @@ class _MealRecordPageState extends State<MealRecordPage> {
           _buildNutritionChip('碳水', total.carb, Colors.orange),
           _buildNutritionChip('蛋白质', total.protein, Colors.red),
           _buildNutritionChip('脂肪', total.fat, Colors.blue),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhotoCheckinArea() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade400),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.photo_camera, size: 18),
+                  SizedBox(width: 6),
+                  Text(
+                    '图片打卡',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              ElevatedButton.icon(
+                onPressed: _isUploadingPhoto ? null : _takePhoto,
+                icon: const Icon(Icons.upload, size: 16),
+                label: Text(_photoUrl == null ? '上传图片' : '重新上传'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_photoUrl == null)
+            const Text(
+              '未上传图片，可用于记录当天餐饮状态。',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          if (_photoUrl != null)
+            Container(
+              height: 120,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                image: DecorationImage(
+                  image: _photoPreviewBytes != null
+                      ? MemoryImage(_photoPreviewBytes!)
+                      : NetworkImage(_photoUrl!) as ImageProvider,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              child: Align(
+                alignment: Alignment.topRight,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () {
+                    setState(() {
+                      _photoUrl = null;
+                      _photoPreviewBytes = null;
+                    });
+                  },
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black54,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -375,6 +412,10 @@ class _MealRecordPageState extends State<MealRecordPage> {
     if (meal == null) return;
 
     try {
+      setState(() {
+        _isUploadingPhoto = true;
+      });
+
       final picker = ImagePicker();
       final file = await picker.pickImage(
         source: ImageSource.gallery,
@@ -407,6 +448,12 @@ class _MealRecordPageState extends State<MealRecordPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('图片上传失败: $e')),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploadingPhoto = false;
+        });
+      }
     }
   }
 
