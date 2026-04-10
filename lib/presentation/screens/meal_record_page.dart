@@ -71,9 +71,12 @@ class _MealRecordPageState extends State<MealRecordPage> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildMealInfo('预设碳水', '${meal.plannedCarb.toStringAsFixed(0)}g'),
-                    _buildMealInfo('预设蛋白', '${meal.plannedProtein.toStringAsFixed(0)}g'),
-                    _buildMealInfo('预设脂肪', '${meal.plannedFat.toStringAsFixed(0)}g'),
+                    _buildMealInfo(
+                        '预设碳水', '${meal.plannedCarb.toStringAsFixed(0)}g'),
+                    _buildMealInfo(
+                        '预设蛋白', '${meal.plannedProtein.toStringAsFixed(0)}g'),
+                    _buildMealInfo(
+                        '预设脂肪', '${meal.plannedFat.toStringAsFixed(0)}g'),
                   ],
                 ),
               ),
@@ -89,7 +92,8 @@ class _MealRecordPageState extends State<MealRecordPage> {
                     children: [
                       const Text(
                         '已选食材',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       ..._selectedItems.map((item) => _buildSelectedItem(item)),
@@ -131,7 +135,8 @@ class _MealRecordPageState extends State<MealRecordPage> {
     return Column(
       children: [
         Text(label, style: const TextStyle(fontSize: 12)),
-        Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Text(value,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
       ],
     );
   }
@@ -332,7 +337,8 @@ class _MealRecordPageState extends State<MealRecordPage> {
                         '${ingredient.fatPer100g.toStringAsFixed(0)}f',
                       ),
                       trailing: const Icon(Icons.add_circle_outline),
-                      onTap: () => _showAddIngredientDialog(context, provider, ingredient),
+                      onTap: () => _showAddIngredientDialog(
+                          context, provider, ingredient),
                     );
                   },
                 ),
@@ -388,7 +394,8 @@ class _MealRecordPageState extends State<MealRecordPage> {
             onPressed: () {
               final amount = double.tryParse(_amountController.text);
               if (amount != null && amount > 0) {
-                final nutrition = provider.calculateIngredientNutrition(ingredient, amount);
+                final nutrition =
+                    provider.calculateIngredientNutrition(ingredient, amount);
                 setState(() {
                   _selectedItems.add(_SelectedItem(
                     ingredient: ingredient,
@@ -435,13 +442,23 @@ class _MealRecordPageState extends State<MealRecordPage> {
           .from(_imageBucket)
           .getPublicUrl(filePath);
 
+      final updatedMeal = meal.copyWith(
+        photoUrl: publicUrl,
+        notes: _notesController.text.trim().isNotEmpty
+            ? _notesController.text.trim()
+            : meal.notes,
+        updatedAt: DateTime.now(),
+      );
+      await _dailyRecordRepo.updateMealActual(updatedMeal);
+      await provider.loadDailyStatus();
+
       if (!mounted) return;
       setState(() {
         _photoUrl = publicUrl;
         _photoPreviewBytes = bytes;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('图片上传成功')),
+        const SnackBar(content: Text('图片上传并关联记录成功')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -464,9 +481,8 @@ class _MealRecordPageState extends State<MealRecordPage> {
         child: SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: _selectedItems.isEmpty
-                ? null
-                : () => _saveMeal(provider),
+            onPressed:
+                _selectedItems.isEmpty ? null : () => _saveMeal(provider),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),

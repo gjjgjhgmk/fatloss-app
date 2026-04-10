@@ -12,9 +12,7 @@ class DailyRecordRepository {
   /// 获取某日所有餐次记录
   List<DailyMealRecord> getDailyRecords(String date) {
     final box = _hiveHelper.dailyMealRecordsBoxInstance;
-    final records = box.values
-        .where((r) => r.recordDate == date)
-        .toList();
+    final records = box.values.where((r) => r.recordDate == date).toList();
     records.sort((a, b) => a.mealOrder.compareTo(b.mealOrder));
     return records;
   }
@@ -74,6 +72,8 @@ class DailyRecordRepository {
   /// 更新餐次实际摄入
   Future<void> updateMealActual(DailyMealRecord record) async {
     await _hiveHelper.dailyMealRecordsBoxInstance.put(record.id, record);
+    final items = getMealItems(record.id);
+    await _syncToSupabase(record, items);
   }
 
   /// 更新餐次状态
@@ -103,7 +103,8 @@ class DailyRecordRepository {
   }
 
   /// 保存食材到餐次
-  Future<void> saveMealItems(String dailyMealRecordId, List<MealItemRecord> items) async {
+  Future<void> saveMealItems(
+      String dailyMealRecordId, List<MealItemRecord> items) async {
     // 先删除旧记录
     final existingItems = getMealItems(dailyMealRecordId);
     for (final item in existingItems) {
@@ -129,7 +130,8 @@ class DailyRecordRepository {
       totalFat += item.fat;
     }
 
-    final record = _hiveHelper.dailyMealRecordsBoxInstance.get(dailyMealRecordId);
+    final record =
+        _hiveHelper.dailyMealRecordsBoxInstance.get(dailyMealRecordId);
     if (record != null) {
       final updatedRecord = record.copyWith(
         actualCarb: totalCarb,
@@ -138,7 +140,8 @@ class DailyRecordRepository {
         mealStatus: 'completed',
         updatedAt: DateTime.now(),
       );
-      await _hiveHelper.dailyMealRecordsBoxInstance.put(dailyMealRecordId, updatedRecord);
+      await _hiveHelper.dailyMealRecordsBoxInstance
+          .put(dailyMealRecordId, updatedRecord);
 
       // 同步到 Supabase
       await _syncToSupabase(updatedRecord, items);
@@ -184,20 +187,25 @@ class DailyRecordRepository {
   List<DailyMealRecord> getRecordsInRange(String startDate, String endDate) {
     final box = _hiveHelper.dailyMealRecordsBoxInstance;
     final records = box.values
-        .where((r) => r.recordDate.compareTo(startDate) >= 0 && r.recordDate.compareTo(endDate) <= 0)
+        .where((r) =>
+            r.recordDate.compareTo(startDate) >= 0 &&
+            r.recordDate.compareTo(endDate) <= 0)
         .toList();
     records.sort((a, b) => a.recordDate.compareTo(b.recordDate));
     return records;
   }
 
   /// 同步餐次记录到 Supabase
-  Future<void> _syncToSupabase(DailyMealRecord record, List<MealItemRecord> items) async {
+  Future<void> _syncToSupabase(
+      DailyMealRecord record, List<MealItemRecord> items) async {
     try {
-      await SupabaseConfig.client.from('daily_meal_records').upsert(record.toMap());
+      await SupabaseConfig.client
+          .from('daily_meal_records')
+          .upsert(record.toMap());
       if (items.isNotEmpty) {
         await SupabaseConfig.client.from('meal_item_records').upsert(
-          items.map((e) => e.toMap()).toList(),
-        );
+              items.map((e) => e.toMap()).toList(),
+            );
       }
     } catch (_) {
       // Supabase 同步失败不影响本地操作
