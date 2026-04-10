@@ -1,5 +1,6 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -13,78 +14,73 @@ import 'presentation/screens/home_page.dart';
 import 'presentation/screens/public_view_page.dart';
 
 void main() async {
-  // 所有初始化代码都必须包裹在 try-catch 中
-  try {
+  // 鎵€鏈夊垵濮嬪寲浠ｇ爜閮藉繀椤诲寘瑁瑰湪 try-catch 涓?  try {
     WidgetsFlutterBinding.ensureInitialized();
 
-    print('[初始化] 开始初始化...');
+    print('[鍒濆鍖朷 寮€濮嬪垵濮嬪寲...');
 
-    // 初始化 Hive（包含数据迁移容错）
-    print('[初始化] 初始化 Hive...');
+    // 鍒濆鍖?Hive锛堝寘鍚暟鎹縼绉诲閿欙級
+    print('[鍒濆鍖朷 鍒濆鍖?Hive...');
     await _initializeHiveWithMigration();
-    print('[初始化] Hive 初始化完成');
+    print('[鍒濆鍖朷 Hive 鍒濆鍖栧畬鎴?);
 
-    // 初始化 Supabase
-    print('[初始化] 初始化 Supabase...');
+    // 鍒濆鍖?Supabase
+    print('[鍒濆鍖朷 鍒濆鍖?Supabase...');
     await SupabaseConfig.initialize();
-    print('[初始化] Supabase 初始化完成');
+    print('[鍒濆鍖朷 Supabase 鍒濆鍖栧畬鎴?);
 
-    // 冷启动先从云端拉取今日/最新数据，保证多端一致
-    print('[初始化] 拉取云端数据...');
+    // 鍐峰惎鍔ㄥ厛浠庝簯绔媺鍙栦粖鏃?鏈€鏂版暟鎹紝淇濊瘉澶氱涓€鑷?    print('[鍒濆鍖朷 鎷夊彇浜戠鏁版嵁...');
     await SyncService().pullCloudDataToLocal();
-    print('[初始化] 云端数据拉取完成');
+    print('[鍒濆鍖朷 浜戠鏁版嵁鎷夊彇瀹屾垚');
 
-    print('[初始化] 启动应用...');
+    print('[鍒濆鍖朷 鍚姩搴旂敤...');
     runApp(const CarbonCycleDietApp());
 
-    // 后台静默同步（Fire and Forget）
-    SyncService().syncAllRecentData();
+    // 鍚庡彴闈欓粯鍚屾锛團ire and Forget锛?    SyncService().syncAllRecentData();
   } catch (error, stackTrace) {
     print('========================================');
-    print('[FATAL ERROR] 应用初始化失败: $error');
-    print('[FATAL ERROR] 堆栈: $stackTrace');
+    print('[FATAL ERROR] 搴旂敤鍒濆鍖栧け璐? $error');
+    print('[FATAL ERROR] 鍫嗘爤: $stackTrace');
     print('========================================');
 
-    // 显示错误界面
+    // 鏄剧ず閿欒鐣岄潰
     runApp(
         ErrorApp(error: error.toString(), stackTrace: stackTrace.toString()));
   }
 }
 
-/// 带数据迁移容错的 Hive 初始化
-Future<void> _initializeHiveWithMigration() async {
+/// 甯︽暟鎹縼绉诲閿欑殑 Hive 鍒濆鍖?Future<void> _initializeHiveWithMigration() async {
   await Hive.initFlutter();
 
-  // 注册所有 adapter
+  // 娉ㄥ唽鎵€鏈?adapter
   _registerAdapters();
 
-  // 直接使用 HiveHelper 的 initialize，它会正确地打开所有 typed boxes
+  // 鐩存帴浣跨敤 HiveHelper 鐨?initialize锛屽畠浼氭纭湴鎵撳紑鎵€鏈?typed boxes
   try {
     await HiveHelper.instance.initialize();
-    print('[Hive] HiveHelper 初始化成功');
+    print('[Hive] HiveHelper 鍒濆鍖栨垚鍔?);
   } catch (error) {
-    print('[Hive] HiveHelper 初始化失败: $error');
-    print('[Hive] 关闭所有 box 并重试...');
+    print('[Hive] HiveHelper 鍒濆鍖栧け璐? $error');
+    print('[Hive] 鍏抽棴鎵€鏈?box 骞堕噸璇?..');
 
     try {
-      // 先关闭所有已打开的 box
+      // 鍏堝叧闂墍鏈夊凡鎵撳紑鐨?box
       await Hive.close();
-      print('[Hive] 所有 box 已关闭');
+      print('[Hive] 鎵€鏈?box 宸插叧闂?);
 
-      // 重新初始化
-      await Hive.initFlutter();
+      // 閲嶆柊鍒濆鍖?      await Hive.initFlutter();
       _registerAdapters();
       await HiveHelper.instance.initialize();
-      print('[Hive] 重试初始化成功');
+      print('[Hive] 閲嶈瘯鍒濆鍖栨垚鍔?);
     } catch (retryError) {
-      print('[Hive] 重试也失败: $retryError');
+      print('[Hive] 閲嶈瘯涔熷け璐? $retryError');
       rethrow;
     }
   }
 }
 
 void _registerAdapters() {
-  // 所有 adapter 必须先注册才能打开 box
+  // 鎵€鏈?adapter 蹇呴』鍏堟敞鍐屾墠鑳芥墦寮€ box
   final helper = HiveHelper.instance;
   helper.ensureAdapterRegistered();
 }
@@ -109,7 +105,7 @@ class ErrorApp extends StatelessWidget {
                 const Icon(Icons.error_outline, color: Colors.red, size: 64),
                 const SizedBox(height: 24),
                 const Text(
-                  '应用初始化失败',
+                  '搴旂敤鍒濆鍖栧け璐?,
                   style: TextStyle(
                       color: Colors.red,
                       fontSize: 24,
@@ -153,18 +149,17 @@ class ErrorApp extends StatelessWidget {
                 ],
                 const SizedBox(height: 24),
                 const Text(
-                  '请将以上错误信息发给开发者',
+                  '璇峰皢浠ヤ笂閿欒淇℃伅鍙戠粰寮€鍙戣€?,
                   style: TextStyle(color: Colors.grey, fontSize: 14),
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: () {
-                    // 清除所有 Hive 数据并重试
-                    _resetAndRetry();
+                    // 娓呴櫎鎵€鏈?Hive 鏁版嵁骞堕噸璇?                    _resetAndRetry();
                   },
                   style:
                       ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-                  child: const Text('清除数据并重试'),
+                  child: const Text('娓呴櫎鏁版嵁骞堕噸璇?),
                 ),
               ],
             ),
@@ -177,9 +172,9 @@ class ErrorApp extends StatelessWidget {
   void _resetAndRetry() async {
     try {
       await Hive.deleteFromDisk();
-      print('[重置] Hive 数据已清除，正在重启...');
+      print('[閲嶇疆] Hive 鏁版嵁宸叉竻闄わ紝姝ｅ湪閲嶅惎...');
     } catch (e) {
-      print('[重置] 清除失败: $e');
+      print('[閲嶇疆] 娓呴櫎澶辫触: $e');
     }
   }
 }
@@ -210,15 +205,29 @@ class CarbonCycleDietApp extends StatelessWidget {
       margin: EdgeInsets.zero,
     );
 
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => const PublicViewPage(),
+        ),
+        GoRoute(
+          path: '/muxi',
+          builder: (context, state) => const HomePage(requireAuth: true),
+        ),
+      ],
+    );
+
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => DietProvider()),
         ChangeNotifierProvider(create: (_) => ReviewProvider()),
         ChangeNotifierProvider(create: (_) => WorkoutProvider()),
       ],
-      child: MaterialApp(
+      child: MaterialApp.router(
         title: '碳循环减脂',
         debugShowCheckedModeBanner: false,
+        routerConfig: router,
         theme: baseTheme.copyWith(
           scaffoldBackgroundColor: Colors.grey.shade50,
           textTheme: textTheme,
@@ -234,12 +243,6 @@ class CarbonCycleDietApp extends StatelessWidget {
           cardTheme: cardTheme,
           dividerColor: Colors.grey.shade200,
         ),
-        initialRoute: '/',
-        routes: {
-          '/': (context) => const HomePage(requireAuth: true),
-          // 围观页保持公开访问，不做密码拦截
-          '/public': (context) => const PublicViewPage(),
-        },
       ),
     );
   }

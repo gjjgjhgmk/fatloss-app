@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../core/constants/workout_constants.dart';
@@ -18,6 +20,9 @@ class PublicViewPage extends StatefulWidget {
 }
 
 class _PublicViewPageState extends State<PublicViewPage> {
+  static const String _editAuthKey = 'edit_auth_verified';
+  static const String _editPassword = '417520Zzh';
+
   bool _loading = true;
   String? _error;
 
@@ -28,6 +33,8 @@ class _PublicViewPageState extends State<PublicViewPage> {
   List<_WeightPoint> _weightPoints = <_WeightPoint>[];
   List<_MealCardData> _todayMeals = <_MealCardData>[];
   _WorkoutCardData? _todayWorkout;
+  int _secretTapCount = 0;
+  DateTime? _lastSecretTapAt;
 
   @override
   void initState() {
@@ -398,11 +405,118 @@ class _PublicViewPageState extends State<PublicViewPage> {
                   index: 4,
                 ),
               ],
+              const SizedBox(height: 24),
+              _buildSecretGate(),
             ],
           );
         },
       ),
     );
+  }
+
+  Widget _buildSecretGate() {
+    return GestureDetector(
+      onTap: _onSecretTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: Text(
+            "Muxi's 100 Days Challenge",
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 12,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onSecretTap() async {
+    final now = DateTime.now();
+    if (_lastSecretTapAt == null ||
+        now.difference(_lastSecretTapAt!).inMilliseconds > 1200) {
+      _secretTapCount = 1;
+    } else {
+      _secretTapCount += 1;
+    }
+    _lastSecretTapAt = now;
+
+    if (_secretTapCount >= 5) {
+      _secretTapCount = 0;
+      await _showAdminAuthDialog();
+    }
+  }
+
+  Future<void> _showAdminAuthDialog() async {
+    final controller = TextEditingController();
+    String? errorText;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('输入管理密码'),
+              content: TextField(
+                controller: controller,
+                autofocus: true,
+                obscureText: true,
+                decoration: InputDecoration(
+                  hintText: '请输入密码',
+                  border: const OutlineInputBorder(),
+                  errorText: errorText,
+                ),
+                onSubmitted: (_) async {
+                  final ok = await _verifyAdminPassword(controller.text);
+                  if (ok) {
+                    if (dialogContext.mounted)
+                      Navigator.of(dialogContext).pop();
+                    if (mounted) context.go('/muxi');
+                  } else {
+                    setDialogState(() {
+                      errorText = '密码错误';
+                    });
+                  }
+                },
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final ok = await _verifyAdminPassword(controller.text);
+                    if (ok) {
+                      if (dialogContext.mounted)
+                        Navigator.of(dialogContext).pop();
+                      if (mounted) context.go('/muxi');
+                    } else {
+                      setDialogState(() {
+                        errorText = '密码错误';
+                      });
+                    }
+                  },
+                  child: const Text('进入编辑页'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<bool> _verifyAdminPassword(String input) async {
+    if (input.trim() != _editPassword) return false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_editAuthKey, true);
+    return true;
   }
 
   Widget _animateIn(Widget child, {required int index}) {
