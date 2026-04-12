@@ -63,10 +63,46 @@ class DailyRecordRepository {
     }
   }
 
+  /// 重建当日餐次记录（当日期类型变更时调用）
+  /// 采用 create-then-upsert 策略，避免 delete-then-create 导致的数据丢失
   Future<void> rebuildDailyRecordsForDate(String date, String dayType) async {
+    // 步骤1: 先备份用户已有的实际摄入数据（如果有的话）
+    final existingRecords = getDailyRecords(date);
+    final Map<String, Map<String, double>> existingActuals = {};
+    for (final record in existingRecords) {
+      if (record.actualCarb > 0 || record.actualProtein > 0 || record.actualFat > 0) {
+        existingActuals[record.id] = {
+          'carb': record.actualCarb,
+          'protein': record.actualProtein,
+          'fat': record.actualFat,
+        };
+      }
+    }
+
+    // 步骤2: 删除旧记录（本地和云端）
     await _deleteLocalRecordsForDate(date);
     await _deleteRemoteRecordsForDate(date);
+
+    // 步骤3: 从模板创建新记录
     await initializeDailyRecords(date, dayType);
+
+    // 步骤4: 恢复用户已有的实际摄入数据（保留用户记录）
+    final newRecords = getDailyRecords(date);
+    for (final record in newRecords) {
+      if (existingActuals.containsKey(record.id)) {
+        final actuals = existingActuals[record.id]!;
+        final updatedRecord = record.copyWith(
+          actualCarb: actuals['carb']!,
+          actualProtein: actuals['protein']!,
+          actualFat: actuals['fat']!,
+          // 如果原本已完成，保持完成状态
+          // mealStatus: record.mealStatus,
+        );
+        await _hiveHelper.dailyMealRecordsBoxInstance.put(record.id, updatedRecord);
+      }
+    }
+
+    // 步骤5: 同步到云端（使用 upsert 避免冲突）
     await _syncDateRecordsToSupabase(date);
   }
 
@@ -234,34 +270,50 @@ class DailyRecordRepository {
     }
   }
 
-  Future<void> _syncDateRecordsToSupabase(String date) async {
-    try {
-      final records = getDailyRecords(date);
-      if (records.isEmpty) return;
+  Future<void> _syncDateRecordsToSupabase(String date, {int retryCount = 3}) async {
+    final records = getDailyRecords(date);
+    if (records.isEmpty) return;
 
-      await SupabaseConfig.client
-          .from('daily_meal_records')
-          .upsert(records.map((r) => r.toMap()).toList());
-    } catch (_) {
-      // Ignore sync failures to avoid blocking local usage.
+    for (int i = 0; i < retryCount; i++) {
+      try {
+        await SupabaseConfig.client
+            .from('daily_meal_records')
+            .upsert(records.map((r) => r.toMap()).toList());
+        print('[Sync] 日期 $date 的餐次记录同步成功');
+        return;
+      } catch (e) {
+        print('[Sync] 日期 $date 的餐次记录同步失败 (尝试 ${i + 1}/$retryCount): $e');
+        if (i < retryCount - 1) {
+          await Future.delayed(Duration(seconds: 1 * (i + 1)));
+        }
+      }
     }
+    print('[Sync] 日期 $date 的餐次记录同步失败，已放弃');
   }
 
   Future<void> _syncToSupabase(
     DailyMealRecord record,
-    List<MealItemRecord> items,
-  ) async {
-    try {
-      await SupabaseConfig.client
-          .from('daily_meal_records')
-          .upsert(record.toMap());
-      if (items.isNotEmpty) {
+    List<MealItemRecord> items, {
+    int retryCount = 3,
+  }) async {
+    for (int i = 0; i < retryCount; i++) {
+      try {
         await SupabaseConfig.client
-            .from('meal_item_records')
-            .upsert(items.map((e) => e.toMap()).toList());
+            .from('daily_meal_records')
+            .upsert(record.toMap());
+        if (items.isNotEmpty) {
+          await SupabaseConfig.client
+              .from('meal_item_records')
+              .upsert(items.map((e) => e.toMap()).toList());
+        }
+        return;
+      } catch (e) {
+        print('[Sync] 餐次 ${record.id} 同步失败 (尝试 ${i + 1}/$retryCount): $e');
+        if (i < retryCount - 1) {
+          await Future.delayed(Duration(seconds: 1 * (i + 1)));
+        }
       }
-    } catch (_) {
-      // Ignore sync failures to avoid blocking local usage.
     }
+    print('[Sync] 餐次 ${record.id} 同步失败，已放弃');
   }
 }

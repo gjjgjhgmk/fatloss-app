@@ -7,6 +7,7 @@ import '../../core/utils/date_type_resolver.dart';
 import '../../data/repositories/weight_record_repository.dart';
 import '../../domain/usecases/daily_diet_manager.dart';
 import '../providers/diet_provider.dart';
+import '../providers/sync_provider.dart';
 import 'meal_record_page.dart';
 import 'review_page.dart';
 import 'weight_record_page.dart';
@@ -279,6 +280,44 @@ class _HomePageState extends State<HomePage> {
                     icon: const Icon(Icons.bar_chart, color: Colors.white70),
                     onPressed: () => _navigateToReview(context),
                     tooltip: '复盘',
+                  ),
+                  const SizedBox(width: 4),
+                  Consumer<SyncProvider>(
+                    builder: (context, syncProvider, child) {
+                      final status = syncProvider.status;
+                      IconData icon;
+                      Color color;
+                      VoidCallback? onPressed;
+
+                      switch (status.state) {
+                        case SyncState.syncing:
+                          icon = Icons.sync;
+                          color = Colors.orange;
+                          onPressed = null;
+                          break;
+                        case SyncState.error:
+                          icon = Icons.sync_problem;
+                          color = Colors.red;
+                          onPressed = () => syncProvider.triggerSync();
+                          break;
+                        case SyncState.success:
+                          icon = Icons.cloud_done;
+                          color = Colors.green;
+                          onPressed = () => syncProvider.triggerSync();
+                          break;
+                        case SyncState.idle:
+                        default:
+                          icon = Icons.cloud_sync;
+                          color = Colors.white70;
+                          onPressed = () => syncProvider.triggerSync();
+                      }
+
+                      return IconButton(
+                        icon: Icon(icon, color: color),
+                        onPressed: onPressed,
+                        tooltip: status.displayText,
+                      );
+                    },
                   ),
                 ],
               ),

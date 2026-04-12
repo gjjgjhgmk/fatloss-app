@@ -30,27 +30,46 @@ class IngredientRepository {
 
   Future<void> insertIngredient(Ingredient ingredient) async {
     await _hiveHelper.ingredientsBoxInstance.put(ingredient.id, ingredient);
-    try {
-      await SupabaseConfig.client.from('ingredients').upsert(
-            ingredient.toMap(includeRemainingAmount: false),
-          );
-    } catch (_) {}
+    await _syncIngredientToCloud(ingredient);
   }
 
   Future<void> updateIngredient(Ingredient ingredient) async {
-    await _hiveHelper.ingredientsBoxInstance.put(ingredient.id, ingredient);
-    try {
-      await SupabaseConfig.client.from('ingredients').upsert(
-            ingredient.toMap(includeRemainingAmount: false),
-          );
-    } catch (_) {}
+    // 更新本地，确保 updatedAt 改变
+    final updated = ingredient.copyWith(updatedAt: DateTime.now());
+    await _hiveHelper.ingredientsBoxInstance.put(updated.id, updated);
+    await _syncIngredientToCloud(updated);
+  }
+
+  Future<void> _syncIngredientToCloud(Ingredient ingredient, {int retryCount = 3}) async {
+    for (int i = 0; i < retryCount; i++) {
+      try {
+        await SupabaseConfig.client.from('ingredients').upsert(
+          ingredient.toMap(includeRemainingAmount: false),
+        );
+        print('[Sync] 食材 ${ingredient.name} 同步成功');
+        return;
+      } catch (e) {
+        print('[Sync] 食材 ${ingredient.name} 同步失败 (尝试 ${i + 1}/$retryCount): $e');
+        if (i < retryCount - 1) {
+          // 指数退避: 1s, 2s, 4s
+          await Future.delayed(Duration(seconds: 1 * (i + 1)));
+        }
+      }
+    }
+    // 所有重试都失败，记录错误（不再静默忽略）
+    print('[Sync] 食材 ${ingredient.id} 同步失败，已放弃');
   }
 
   Future<void> deleteIngredient(String id) async {
+    final ingredient = _hiveHelper.ingredientsBoxInstance.get(id);
     await _hiveHelper.ingredientsBoxInstance.delete(id);
-    try {
-      await SupabaseConfig.client.from('ingredients').delete().eq('id', id);
-    } catch (_) {}
+    if (ingredient != null) {
+      try {
+        await SupabaseConfig.client.from('ingredients').delete().eq('id', id);
+      } catch (e) {
+        print('[Sync] 删除食材 ${ingredient.name} 失败: $e');
+      }
+    }
   }
 
   List<Ingredient> searchIngredients(String keyword) {

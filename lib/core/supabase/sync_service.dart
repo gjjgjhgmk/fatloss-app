@@ -45,6 +45,8 @@ class SyncService {
     await pullCloudDataToLocal();
   }
 
+  /// 从云端拉取今日数据到本地（使用 last-write-wins 策略）
+  /// 比较本地和云端记录的 updatedAt，保留最新版本
   Future<void> _pullTodayMealRecords(String today) async {
     final mealRows = await SupabaseConfig.client
         .from('daily_meal_records')
@@ -54,46 +56,102 @@ class SyncService {
     final dailyBox = HiveHelper.instance.dailyMealRecordsBoxInstance;
     final mealItemBox = HiveHelper.instance.mealItemRecordsBoxInstance;
 
-    // 先清理本地今日数据
-    final localTodayMealIds = dailyBox.values
-        .where((r) => r.recordDate == today)
-        .map((r) => r.id)
-        .toList();
-    final localTodayItems = mealItemBox.values
-        .where((i) => localTodayMealIds.contains(i.dailyMealRecordId))
-        .toList();
-    for (final item in localTodayItems) {
-      await mealItemBox.delete(item.id);
-    }
-    for (final id in localTodayMealIds) {
-      await dailyBox.delete(id);
+    // 云端今日无数据，直接返回（保留本地数据）
+    if (mealRows.isEmpty) {
+      print('[Sync] 云端无今日餐次记录，保留本地数据');
+      return;
     }
 
-    // 云端今日无数据，直接返回
-    if (mealRows.isEmpty) return;
+    // 构建云端记录映射
+    final cloudMealsMap = <String, DailyMealRecord>{};
+    for (final row in mealRows) {
+      final meal = DailyMealRecord.fromMap(Map<String, dynamic>.from(row));
+      cloudMealsMap[meal.id] = meal;
+    }
 
-    // 覆盖写入餐次主记录
-    final cloudMeals = mealRows
-        .map((e) => DailyMealRecord.fromMap(Map<String, dynamic>.from(e)))
-        .toList();
-    for (final meal in cloudMeals) {
+    // 获取本地今日记录
+    final localMeals = dailyBox.values.where((r) => r.recordDate == today).toList();
+
+    // 合并策略：比较 updatedAt，保留最新
+    for (final localMeal in localMeals) {
+      final cloudMeal = cloudMealsMap[localMeal.id];
+      if (cloudMeal == null) {
+        // 云端没有这条记录，保留本地
+        continue;
+      }
+
+      // 比较 updatedAt：谁更新保留谁
+      final localUpdated = localMeal.updatedAt;
+      final cloudUpdated = cloudMeal.updatedAt;
+      final timeDiff = cloudUpdated.difference(localUpdated).inSeconds.abs();
+
+      if (timeDiff < 2) {
+        // 时间差小于2秒，优先保留本地（用户正在操作的数据）
+        print('[Sync] 餐次 ${localMeal.id} 时间差${timeDiff}s，保留本地');
+        cloudMealsMap.remove(localMeal.id);
+      } else if (cloudUpdated.isAfter(localUpdated)) {
+        // 云端更新，保留云端（删除本地旧记录）
+        print('[Sync] 餐次 ${localMeal.id} 云端更新，采纳云端数据');
+        await dailyBox.delete(localMeal.id);
+      } else {
+        // 本地更新，保留本地（删除云端旧数据标记，由后续 syncAllRecentData 同步）
+        print('[Sync] 餐次 ${localMeal.id} 本地更新，保留本地');
+        cloudMealsMap.remove(localMeal.id);
+      }
+    }
+
+    // 写入剩余的云端记录（没有对应本地更新的）
+    for (final meal in cloudMealsMap.values) {
       await dailyBox.put(meal.id, meal);
+      print('[Sync] 从云端写入餐次 ${meal.id}');
     }
 
-    // 拉取并覆盖写入餐次明细
-    final mealIds = cloudMeals.map((e) => e.id).toList();
-    final mealItemRows = await SupabaseConfig.client
-        .from('meal_item_records')
-        .select()
-        .inFilter('daily_meal_record_id', mealIds);
-    final cloudItems = mealItemRows
-        .map((e) => MealItemRecord.fromMap(Map<String, dynamic>.from(e)))
-        .toList();
-    for (final item in cloudItems) {
-      await mealItemBox.put(item.id, item);
+    // 处理餐次明细：类似策略
+    if (cloudMealsMap.isNotEmpty) {
+      final mealIds = cloudMealsMap.keys.toList();
+      final mealItemRows = await SupabaseConfig.client
+          .from('meal_item_records')
+          .select()
+          .inFilter('daily_meal_record_id', mealIds);
+
+      final cloudItemsMap = <String, MealItemRecord>{};
+      for (final row in mealItemRows) {
+        final item = MealItemRecord.fromMap(Map<String, dynamic>.from(row));
+        cloudItemsMap[item.id] = item;
+      }
+
+      // 获取本地属于这些 meal 的 items
+      final localItems = mealItemBox.values
+          .where((i) => mealIds.contains(i.dailyMealRecordId))
+          .toList();
+
+      for (final localItem in localItems) {
+        final cloudItem = cloudItemsMap[localItem.id];
+        if (cloudItem == null) {
+          // 云端没有，保留本地
+          continue;
+        }
+
+        final localUpdated = localItem.createdAt; // MealItemRecord 用 createdAt
+        final cloudUpdated = cloudItem.createdAt;
+        final timeDiff = cloudUpdated.difference(localUpdated).inSeconds.abs();
+
+        if (timeDiff < 2) {
+          cloudItemsMap.remove(localItem.id);
+        } else if (cloudUpdated.isAfter(localUpdated)) {
+          await mealItemBox.delete(localItem.id);
+        } else {
+          cloudItemsMap.remove(localItem.id);
+        }
+      }
+
+      for (final item in cloudItemsMap.values) {
+        await mealItemBox.put(item.id, item);
+      }
     }
   }
 
+  /// 从云端拉取训练记录（last-write-wins）
   Future<void> _pullTodayWorkoutRecords(String today) async {
     final workoutRows = await SupabaseConfig.client
         .from('workout_records')
@@ -102,57 +160,120 @@ class SyncService {
 
     final workoutBox = HiveHelper.instance.workoutRecordsBoxInstance;
 
-    // 清理本地今日训练记录
-    final localTodayRecords = workoutBox.values
-        .where((r) => r.recordDate == today)
-        .toList();
-    for (final record in localTodayRecords) {
-      await workoutBox.delete(record.id);
+    if (workoutRows.isEmpty) {
+      print('[Sync] 云端无今日训练记录，保留本地数据');
+      return;
     }
 
-    // 覆盖写入云端记录
+    final cloudRecordsMap = <String, WorkoutRecord>{};
     for (final row in workoutRows) {
       final record = WorkoutRecord.fromMap(Map<String, dynamic>.from(row));
+      cloudRecordsMap[record.id] = record;
+    }
+
+    final localRecords = workoutBox.values.where((r) => r.recordDate == today).toList();
+
+    for (final local in localRecords) {
+      final cloud = cloudRecordsMap[local.id];
+      if (cloud == null) continue;
+
+      final localUpdated = local.updatedAt;
+      final cloudUpdated = cloud.updatedAt;
+
+      if (cloudUpdated.isAfter(localUpdated)) {
+        await workoutBox.delete(local.id);
+      } else {
+        cloudRecordsMap.remove(local.id);
+      }
+    }
+
+    for (final record in cloudRecordsMap.values) {
       await workoutBox.put(record.id, record);
+      print('[Sync] 从云端写入训练记录 ${record.id}');
     }
   }
 
+  /// 从云端拉取体重记录（last-write-wins）
   Future<void> _pullTodayWeightRecords(String today) async {
-    final weightBox = HiveHelper.instance.weightRecordsBoxInstance;
-    final localTodayRecords = weightBox.values
-        .where((r) => r.recordDate == today)
-        .toList();
-    for (final record in localTodayRecords) {
-      await weightBox.delete(record.id);
-    }
-
     final weightRows = await SupabaseConfig.client
         .from('weight_records')
         .select()
         .eq('record_date', today);
 
+    final weightBox = HiveHelper.instance.weightRecordsBoxInstance;
+
+    if (weightRows.isEmpty) {
+      print('[Sync] 云端无今日体重记录，保留本地数据');
+      return;
+    }
+
+    final cloudRecordsMap = <String, WeightRecord>{};
     for (final row in weightRows) {
       final record = WeightRecord.fromMap(Map<String, dynamic>.from(row));
+      cloudRecordsMap[record.id] = record;
+    }
+
+    final localRecords = weightBox.values.where((r) => r.recordDate == today).toList();
+
+    for (final local in localRecords) {
+      final cloud = cloudRecordsMap[local.id];
+      if (cloud == null) continue;
+
+      final localUpdated = local.updatedAt;
+      final cloudUpdated = cloud.updatedAt;
+
+      if (cloudUpdated.isAfter(localUpdated)) {
+        await weightBox.delete(local.id);
+      } else {
+        cloudRecordsMap.remove(local.id);
+      }
+    }
+
+    for (final record in cloudRecordsMap.values) {
       await weightBox.put(record.id, record);
+      print('[Sync] 从云端写入体重记录 ${record.id}');
     }
   }
 
+  /// 从云端拉取腰围记录（last-write-wins）
   Future<void> _pullTodayWaistRecords(String today) async {
-    final waistBox = HiveHelper.instance.waistRecordsBoxInstance;
-    final localTodayRecords = waistBox.values
-        .where((r) => r.recordDate == today)
-        .toList();
-    for (final record in localTodayRecords) {
-      await waistBox.delete(record.id);
-    }
-
     final waistRows = await SupabaseConfig.client
         .from('waist_records')
         .select()
         .eq('record_date', today);
+
+    final waistBox = HiveHelper.instance.waistRecordsBoxInstance;
+
+    if (waistRows.isEmpty) {
+      print('[Sync] 云端无今日腰围记录，保留本地数据');
+      return;
+    }
+
+    final cloudRecordsMap = <String, WaistRecord>{};
     for (final row in waistRows) {
       final record = WaistRecord.fromMap(Map<String, dynamic>.from(row));
+      cloudRecordsMap[record.id] = record;
+    }
+
+    final localRecords = waistBox.values.where((r) => r.recordDate == today).toList();
+
+    for (final local in localRecords) {
+      final cloud = cloudRecordsMap[local.id];
+      if (cloud == null) continue;
+
+      final localUpdated = local.updatedAt;
+      final cloudUpdated = cloud.updatedAt;
+
+      if (cloudUpdated.isAfter(localUpdated)) {
+        await waistBox.delete(local.id);
+      } else {
+        cloudRecordsMap.remove(local.id);
+      }
+    }
+
+    for (final record in cloudRecordsMap.values) {
       await waistBox.put(record.id, record);
+      print('[Sync] 从云端写入腰围记录 ${record.id}');
     }
   }
 

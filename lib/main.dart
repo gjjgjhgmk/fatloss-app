@@ -9,6 +9,7 @@ import 'core/supabase/supabase_config.dart';
 import 'core/supabase/sync_service.dart';
 import 'presentation/providers/diet_provider.dart';
 import 'presentation/providers/review_provider.dart';
+import 'presentation/providers/sync_provider.dart';
 import 'presentation/providers/workout_provider.dart';
 import 'presentation/screens/home_page.dart';
 import 'presentation/screens/public_view_page.dart';
@@ -223,6 +224,7 @@ class CarbonCycleDietApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => DietProvider()),
         ChangeNotifierProvider(create: (_) => ReviewProvider()),
         ChangeNotifierProvider(create: (_) => WorkoutProvider()),
+        ChangeNotifierProvider(create: (_) => SyncProvider()),
       ],
       child: MaterialApp.router(
         title: '碳循环减脂',
