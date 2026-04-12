@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/waist_record.dart';
 import '../../data/repositories/waist_record_repository.dart';
@@ -104,7 +103,8 @@ class _WaistRecordPageState extends State<WaistRecordPage> {
                 children: [
                   Text(
                     _record!.waist.toStringAsFixed(1),
-                    style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        fontSize: 48, fontWeight: FontWeight.bold),
                   ),
                   const Text(' cm', style: TextStyle(fontSize: 18)),
                 ],
@@ -165,120 +165,149 @@ class _WaistRecordPageState extends State<WaistRecordPage> {
 
   void _showAddDialog() {
     final waistController = TextEditingController();
+    final focusNode = FocusNode();
     final timeController = TextEditingController(
       text: DateFormat('HH:mm').format(DateTime.now()),
     );
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('记录腰围'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: waistController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: '腰围 (cm)',
-                hintText: '例如: 85.5',
+      builder: (context) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (focusNode.canRequestFocus) {
+            focusNode.requestFocus();
+          }
+        });
+        return AlertDialog(
+          title: const Text('记录腰围'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: waistController,
+                focusNode: focusNode,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: '腰围 (cm)',
+                  hintText: '例如: 85.5',
+                ),
               ),
-              autofocus: true,
+              const SizedBox(height: 16),
+              TextField(
+                controller: timeController,
+                decoration: const InputDecoration(
+                  labelText: '时间 (HH:mm)',
+                  hintText: '例如: 08:30',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: timeController,
-              decoration: const InputDecoration(
-                labelText: '时间 (HH:mm)',
-                hintText: '例如: 08:30',
-              ),
+            ElevatedButton(
+              onPressed: () async {
+                final waist = double.tryParse(waistController.text);
+                if (waist != null && waist > 0) {
+                  final record = WaistRecord(
+                    id: _selectedDate,
+                    recordDate: _selectedDate,
+                    waist: waist,
+                    recordTime: timeController.text.isNotEmpty
+                        ? timeController.text
+                        : null,
+                  );
+                  await _repo.saveWaistRecord(record);
+                  Navigator.pop(context);
+                  _loadRecord();
+                }
+              },
+              child: const Text('保存'),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final waist = double.tryParse(waistController.text);
-              if (waist != null && waist > 0) {
-                final record = WaistRecord(
-                  id: _selectedDate,
-                  recordDate: _selectedDate,
-                  waist: waist,
-                  recordTime: timeController.text.isNotEmpty ? timeController.text : null,
-                );
-                await _repo.saveWaistRecord(record);
-                Navigator.pop(context);
-                _loadRecord();
-              }
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+        );
+      },
     );
+
+    focusNode.dispose();
   }
 
   void _showEditDialog() {
     if (_record == null) return;
 
-    final waistController = TextEditingController(text: _record!.waist.toString());
-    final timeController = TextEditingController(text: _record!.recordTime ?? '');
+    final waistController =
+        TextEditingController(text: _record!.waist.toString());
+    final focusNode = FocusNode();
+    final timeController =
+        TextEditingController(text: _record!.recordTime ?? '');
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('修改腰围记录'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: waistController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: '腰围 (cm)'),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: timeController,
-              decoration: const InputDecoration(labelText: '时间 (HH:mm)'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await _repo.deleteWaistRecord(_selectedDate);
-              Navigator.pop(context);
-              _loadRecord();
-            },
-            child: const Text('删除', style: TextStyle(color: Colors.red)),
+      builder: (context) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (focusNode.canRequestFocus) {
+            focusNode.requestFocus();
+          }
+        });
+        return AlertDialog(
+          title: const Text('修改腰围记录'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: waistController,
+                focusNode: focusNode,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: '腰围 (cm)'),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: timeController,
+                decoration: const InputDecoration(labelText: '时间 (HH:mm)'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final waist = double.tryParse(waistController.text);
-              if (waist != null && waist > 0) {
-                final updated = _record!.copyWith(
-                  waist: waist,
-                  recordTime: timeController.text.isNotEmpty ? timeController.text : null,
-                  updatedAt: DateTime.now(),
-                );
-                await _repo.saveWaistRecord(updated);
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await _repo.deleteWaistRecord(_selectedDate);
                 Navigator.pop(context);
                 _loadRecord();
-              }
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+              },
+              child: const Text('删除', style: TextStyle(color: Colors.red)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final waist = double.tryParse(waistController.text);
+                if (waist != null && waist > 0) {
+                  final updated = _record!.copyWith(
+                    waist: waist,
+                    recordTime: timeController.text.isNotEmpty
+                        ? timeController.text
+                        : null,
+                    updatedAt: DateTime.now(),
+                  );
+                  await _repo.saveWaistRecord(updated);
+                  Navigator.pop(context);
+                  _loadRecord();
+                }
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        );
+      },
     );
+
+    focusNode.dispose();
   }
 
   void _showTrend() {

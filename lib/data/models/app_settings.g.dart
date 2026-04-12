@@ -19,20 +19,24 @@ class AppSettingsAdapter extends TypeAdapter<AppSettings> {
     return AppSettings(
       cycleStartDate: fields[0] as DateTime,
       skippedDays: fields[1] as int,
-      cardioDays: (fields[2] as List).cast<String>(),
+      cardioDays: ((fields[2] as List?) ?? const <dynamic>[]).cast<String>(),
+      manualRestDays:
+          ((fields[3] as List?) ?? const <dynamic>[]).cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, AppSettings obj) {
     writer
-      ..writeByte(3)
+      ..writeByte(4)
       ..writeByte(0)
       ..write(obj.cycleStartDate)
       ..writeByte(1)
       ..write(obj.skippedDays)
       ..writeByte(2)
-      ..write(obj.cardioDays);
+      ..write(obj.cardioDays)
+      ..writeByte(3)
+      ..write(obj.manualRestDays);
   }
 
   @override

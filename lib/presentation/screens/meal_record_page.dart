@@ -28,7 +28,6 @@ class _MealRecordPageState extends State<MealRecordPage> {
   final _notesController = TextEditingController();
   final _dailyRecordRepo = DailyRecordRepository();
   String _selectedCategory = 'all';
-  Ingredient? _selectedIngredient;
   String? _photoUrl;
   Uint8List? _photoPreviewBytes;
   bool _isUploadingPhoto = false;
@@ -369,48 +368,56 @@ class _MealRecordPageState extends State<MealRecordPage> {
     DietProvider provider,
     Ingredient ingredient,
   ) {
-    _selectedIngredient = ingredient;
+    final focusNode = FocusNode();
     _amountController.text = '';
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('添加 ${ingredient.name}'),
-        content: TextField(
-          controller: _amountController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: '克数 (g)',
-            hintText: '例如: 100',
+      builder: (context) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (focusNode.canRequestFocus) {
+            focusNode.requestFocus();
+          }
+        });
+        return AlertDialog(
+          title: Text('添加 ${ingredient.name}'),
+          content: TextField(
+            controller: _amountController,
+            focusNode: focusNode,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: '克数 (g)',
+              hintText: '例如: 100',
+            ),
           ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final amount = double.tryParse(_amountController.text);
-              if (amount != null && amount > 0) {
-                final nutrition =
-                    provider.calculateIngredientNutrition(ingredient, amount);
-                setState(() {
-                  _selectedItems.add(_SelectedItem(
-                    ingredient: ingredient,
-                    amount: amount,
-                    nutrition: nutrition,
-                  ));
-                });
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('添加'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final amount = double.tryParse(_amountController.text);
+                if (amount != null && amount > 0) {
+                  final nutrition =
+                      provider.calculateIngredientNutrition(ingredient, amount);
+                  setState(() {
+                    _selectedItems.add(_SelectedItem(
+                      ingredient: ingredient,
+                      amount: amount,
+                      nutrition: nutrition,
+                    ));
+                  });
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('添加'),
+            ),
+          ],
+        );
+      },
     );
+    focusNode.dispose();
   }
 
   Future<void> _takePhoto() async {

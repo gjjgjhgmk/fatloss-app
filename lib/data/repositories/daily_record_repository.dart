@@ -1,4 +1,5 @@
 import 'package:uuid/uuid.dart';
+
 import '../../core/database/hive_helper.dart';
 import '../../core/supabase/supabase_config.dart';
 import '../../core/utils/date_type_resolver.dart';
@@ -9,7 +10,6 @@ class DailyRecordRepository {
   final HiveHelper _hiveHelper = HiveHelper.instance;
   final _uuid = const Uuid();
 
-  /// 获取某日所有餐次记录
   List<DailyMealRecord> getDailyRecords(String date) {
     final box = _hiveHelper.dailyMealRecordsBoxInstance;
     final records = box.values.where((r) => r.recordDate == date).toList();
@@ -17,18 +17,15 @@ class DailyRecordRepository {
     return records;
   }
 
-  /// 获取某餐次记录详情（含食材列表）
   DailyMealRecord? getMealRecord(String date, int mealOrder) {
     final key = '${date}_$mealOrder';
     final record = _hiveHelper.dailyMealRecordsBoxInstance.get(key);
     if (record == null) return null;
 
-    // 加载食材列表
     final items = getMealItems(key);
     return record.copyWith(items: items);
   }
 
-  /// 获取某餐次记录详情（含食材列表）通过ID
   DailyMealRecord? getMealRecordById(String id) {
     final record = _hiveHelper.dailyMealRecordsBoxInstance.get(id);
     if (record == null) return null;
@@ -37,13 +34,10 @@ class DailyRecordRepository {
     return record.copyWith(items: items);
   }
 
-  /// 创建/更新每日餐次记录（根据日期类型初始化）
   Future<void> initializeDailyRecords(String date, String dayType) async {
-    // 检查是否已初始化
     final existing = getDailyRecords(date);
     if (existing.isNotEmpty) return;
 
-    // 获取该日期类型的餐次模板
     final templates = DateTypeResolver.getMealTemplatesForDayType(dayType);
 
     for (final template in templates) {
@@ -69,49 +63,51 @@ class DailyRecordRepository {
     }
   }
 
-  /// 更新餐次实际摄入
+  Future<void> rebuildDailyRecordsForDate(String date, String dayType) async {
+    await _deleteLocalRecordsForDate(date);
+    await _deleteRemoteRecordsForDate(date);
+    await initializeDailyRecords(date, dayType);
+    await _syncDateRecordsToSupabase(date);
+  }
+
   Future<void> updateMealActual(DailyMealRecord record) async {
     await _hiveHelper.dailyMealRecordsBoxInstance.put(record.id, record);
     final items = getMealItems(record.id);
     await _syncToSupabase(record, items);
   }
 
-  /// 更新餐次状态
   Future<void> updateMealStatus(String id, String status) async {
     final record = _hiveHelper.dailyMealRecordsBoxInstance.get(id);
-    if (record != null) {
-      await _hiveHelper.dailyMealRecordsBoxInstance.put(
-        id,
-        record.copyWith(
-          mealStatus: status,
-          updatedAt: DateTime.now(),
-        ),
-      );
-    }
+    if (record == null) return;
+
+    await _hiveHelper.dailyMealRecordsBoxInstance.put(
+      id,
+      record.copyWith(
+        mealStatus: status,
+        updatedAt: DateTime.now(),
+      ),
+    );
   }
 
-  /// 跳过某餐
   Future<void> skipMeal(String date, int mealOrder) async {
     final id = '${date}_$mealOrder';
     await updateMealStatus(id, 'skipped');
 
-    // 同步到 Supabase
     final record = _hiveHelper.dailyMealRecordsBoxInstance.get(id);
     if (record != null) {
-      await _syncToSupabase(record, []);
+      await _syncToSupabase(record, <MealItemRecord>[]);
     }
   }
 
-  /// 保存食材到餐次
   Future<void> saveMealItems(
-      String dailyMealRecordId, List<MealItemRecord> items) async {
-    // 先删除旧记录
+    String dailyMealRecordId,
+    List<MealItemRecord> items,
+  ) async {
     final existingItems = getMealItems(dailyMealRecordId);
     for (final item in existingItems) {
       await _hiveHelper.mealItemRecordsBoxInstance.delete(item.id);
     }
 
-    // 插入新记录
     for (final item in items) {
       final id = _uuid.v4();
       await _hiveHelper.mealItemRecordsBoxInstance.put(
@@ -120,7 +116,6 @@ class DailyRecordRepository {
       );
     }
 
-    // 更新餐次的实际营养素
     double totalCarb = 0;
     double totalProtein = 0;
     double totalFat = 0;
@@ -132,30 +127,27 @@ class DailyRecordRepository {
 
     final record =
         _hiveHelper.dailyMealRecordsBoxInstance.get(dailyMealRecordId);
-    if (record != null) {
-      final updatedRecord = record.copyWith(
-        actualCarb: totalCarb,
-        actualProtein: totalProtein,
-        actualFat: totalFat,
-        mealStatus: 'completed',
-        updatedAt: DateTime.now(),
-      );
-      await _hiveHelper.dailyMealRecordsBoxInstance
-          .put(dailyMealRecordId, updatedRecord);
+    if (record == null) return;
 
-      // 同步到 Supabase
-      await _syncToSupabase(updatedRecord, items);
-    }
+    final updatedRecord = record.copyWith(
+      actualCarb: totalCarb,
+      actualProtein: totalProtein,
+      actualFat: totalFat,
+      mealStatus: 'completed',
+      updatedAt: DateTime.now(),
+    );
+    await _hiveHelper.dailyMealRecordsBoxInstance
+        .put(dailyMealRecordId, updatedRecord);
+
+    await _syncToSupabase(updatedRecord, items);
   }
 
-  /// 获取餐次的所有食材记录
   List<MealItemRecord> getMealItems(String dailyMealRecordId) {
     return _hiveHelper.mealItemRecordsBoxInstance.values
         .where((item) => item.dailyMealRecordId == dailyMealRecordId)
         .toList();
   }
 
-  /// 删除餐次食材记录
   Future<void> deleteMealItems(String dailyMealRecordId) async {
     final items = getMealItems(dailyMealRecordId);
     for (final item in items) {
@@ -163,7 +155,6 @@ class DailyRecordRepository {
     }
   }
 
-  /// 获取当日营养素总计
   Map<String, double> getDailyTotals(String date) {
     final records = getDailyRecords(date);
     double totalCarb = 0;
@@ -176,14 +167,13 @@ class DailyRecordRepository {
       totalFat += record.actualFat;
     }
 
-    return {
+    return <String, double>{
       'carb': totalCarb,
       'protein': totalProtein,
       'fat': totalFat,
     };
   }
 
-  /// 获取日期范围内的记录
   List<DailyMealRecord> getRecordsInRange(String startDate, String endDate) {
     final box = _hiveHelper.dailyMealRecordsBoxInstance;
     final records = box.values
@@ -195,20 +185,83 @@ class DailyRecordRepository {
     return records;
   }
 
-  /// 同步餐次记录到 Supabase
+  Future<void> _deleteLocalRecordsForDate(String date) async {
+    final dailyBox = _hiveHelper.dailyMealRecordsBoxInstance;
+    final itemBox = _hiveHelper.mealItemRecordsBoxInstance;
+
+    final records = dailyBox.values.where((r) => r.recordDate == date).toList();
+    final recordIds = records.map((e) => e.id).toSet();
+
+    final items = itemBox.values
+        .where((i) => recordIds.contains(i.dailyMealRecordId))
+        .toList();
+
+    for (final item in items) {
+      await itemBox.delete(item.id);
+    }
+
+    for (final record in records) {
+      await dailyBox.delete(record.id);
+    }
+  }
+
+  Future<void> _deleteRemoteRecordsForDate(String date) async {
+    try {
+      final existingRows = await SupabaseConfig.client
+          .from('daily_meal_records')
+          .select('id')
+          .eq('record_date', date);
+
+      final ids = (existingRows as List)
+          .whereType<Map>()
+          .map((e) => e['id'])
+          .whereType<String>()
+          .toList();
+
+      if (ids.isNotEmpty) {
+        await SupabaseConfig.client
+            .from('meal_item_records')
+            .delete()
+            .inFilter('daily_meal_record_id', ids);
+      }
+
+      await SupabaseConfig.client
+          .from('daily_meal_records')
+          .delete()
+          .eq('record_date', date);
+    } catch (_) {
+      // Ignore remote cleanup failures and keep local flow available.
+    }
+  }
+
+  Future<void> _syncDateRecordsToSupabase(String date) async {
+    try {
+      final records = getDailyRecords(date);
+      if (records.isEmpty) return;
+
+      await SupabaseConfig.client
+          .from('daily_meal_records')
+          .upsert(records.map((r) => r.toMap()).toList());
+    } catch (_) {
+      // Ignore sync failures to avoid blocking local usage.
+    }
+  }
+
   Future<void> _syncToSupabase(
-      DailyMealRecord record, List<MealItemRecord> items) async {
+    DailyMealRecord record,
+    List<MealItemRecord> items,
+  ) async {
     try {
       await SupabaseConfig.client
           .from('daily_meal_records')
           .upsert(record.toMap());
       if (items.isNotEmpty) {
-        await SupabaseConfig.client.from('meal_item_records').upsert(
-              items.map((e) => e.toMap()).toList(),
-            );
+        await SupabaseConfig.client
+            .from('meal_item_records')
+            .upsert(items.map((e) => e.toMap()).toList());
       }
     } catch (_) {
-      // Supabase 同步失败不影响本地操作
+      // Ignore sync failures to avoid blocking local usage.
     }
   }
 }

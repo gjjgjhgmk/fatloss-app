@@ -10,6 +10,7 @@ import '../../data/models/weight_record.dart';
 import '../../data/models/waist_record.dart';
 import '../../data/models/workout_record.dart';
 import '../../data/models/app_settings.dart';
+import '../constants/diet_constants.dart';
 
 class HiveHelper {
   static final HiveHelper instance = HiveHelper._init();
@@ -53,16 +54,26 @@ class HiveHelper {
   }
 
   Box<DietRule> get dietRulesBoxInstance => Hive.box<DietRule>(dietRulesBox);
-  Box<MealTemplate> get mealTemplatesBoxInstance => Hive.box<MealTemplate>(mealTemplatesBox);
-  Box<Ingredient> get ingredientsBoxInstance => Hive.box<Ingredient>(ingredientsBox);
-  Box<DailyMealRecord> get dailyMealRecordsBoxInstance => Hive.box<DailyMealRecord>(dailyMealRecordsBox);
-  Box<MealItemRecord> get mealItemRecordsBoxInstance => Hive.box<MealItemRecord>(mealItemRecordsBox);
-  Box<DailyReview> get dailyReviewsBoxInstance => Hive.box<DailyReview>(dailyReviewsBox);
-  Box<WeeklyReview> get weeklyReviewsBoxInstance => Hive.box<WeeklyReview>(weeklyReviewsBox);
-  Box<WeightRecord> get weightRecordsBoxInstance => Hive.box<WeightRecord>(weightRecordsBox);
-  Box<WaistRecord> get waistRecordsBoxInstance => Hive.box<WaistRecord>(waistRecordsBox);
-  Box<WorkoutRecord> get workoutRecordsBoxInstance => Hive.box<WorkoutRecord>(workoutRecordsBox);
-  Box<AppSettings> get appSettingsBoxInstance => Hive.box<AppSettings>(appSettingsBox);
+  Box<MealTemplate> get mealTemplatesBoxInstance =>
+      Hive.box<MealTemplate>(mealTemplatesBox);
+  Box<Ingredient> get ingredientsBoxInstance =>
+      Hive.box<Ingredient>(ingredientsBox);
+  Box<DailyMealRecord> get dailyMealRecordsBoxInstance =>
+      Hive.box<DailyMealRecord>(dailyMealRecordsBox);
+  Box<MealItemRecord> get mealItemRecordsBoxInstance =>
+      Hive.box<MealItemRecord>(mealItemRecordsBox);
+  Box<DailyReview> get dailyReviewsBoxInstance =>
+      Hive.box<DailyReview>(dailyReviewsBox);
+  Box<WeeklyReview> get weeklyReviewsBoxInstance =>
+      Hive.box<WeeklyReview>(weeklyReviewsBox);
+  Box<WeightRecord> get weightRecordsBoxInstance =>
+      Hive.box<WeightRecord>(weightRecordsBox);
+  Box<WaistRecord> get waistRecordsBoxInstance =>
+      Hive.box<WaistRecord>(waistRecordsBox);
+  Box<WorkoutRecord> get workoutRecordsBoxInstance =>
+      Hive.box<WorkoutRecord>(workoutRecordsBox);
+  Box<AppSettings> get appSettingsBoxInstance =>
+      Hive.box<AppSettings>(appSettingsBox);
 
   /// 确保所有 adapter 已注册（安全调用，不会重复注册）
   /// 使用 try-catch 防止 isAdapterRegistered 在 Web 端不可靠导致的问题
@@ -117,7 +128,7 @@ class HiveHelper {
     // 默认周期基准日设为 2026-04-07（练背日）
     // 这样 2026-04-09 就是练腿日：back(4/7) → chest(4/8) → leg(4/9)
     final settings = AppSettings(
-      cycleStartDate: DateTime(2026, 4, 7),
+      cycleStartDate: DateTime(2026, 4, 8),
       skippedDays: 0,
       cardioDays: [],
     );
@@ -174,36 +185,31 @@ class HiveHelper {
   }
 
   Future<void> _seedMealTemplates() async {
-    final templates = [
-      // 休息日
-      MealTemplate(dayType: 'rest', mealOrder: 1, mealTime: '11:00', carb: 80.0, protein: 60.0, fat: 28.0),
-      MealTemplate(dayType: 'rest', mealOrder: 2, mealTime: '17:00', carb: 80.0, protein: 60.0, fat: 28.0),
-
-      // 练背日
-      MealTemplate(dayType: 'back', mealOrder: 1, mealTime: '11:00', carb: 80.0, protein: 40.0, fat: 20.0),
-      MealTemplate(dayType: 'back', mealOrder: 2, mealTime: '17:00', carb: 80.0, protein: 40.0, fat: 20.0),
-      MealTemplate(dayType: 'back', mealOrder: 3, mealTime: '22:30', carb: 80.0, protein: 40.0, fat: 16.0, isPostWorkout: true),
-
-      // 练胸日
-      MealTemplate(dayType: 'chest', mealOrder: 1, mealTime: '11:00', carb: 80.0, protein: 40.0, fat: 20.0),
-      MealTemplate(dayType: 'chest', mealOrder: 2, mealTime: '17:00', carb: 80.0, protein: 40.0, fat: 20.0),
-      MealTemplate(dayType: 'chest', mealOrder: 3, mealTime: '22:30', carb: 80.0, protein: 40.0, fat: 16.0, isPostWorkout: true),
-
-      // 练腿日
-      MealTemplate(dayType: 'leg', mealOrder: 1, mealTime: '11:00', carb: 80.0, protein: 40.0, fat: 20.0),
-      MealTemplate(dayType: 'leg', mealOrder: 2, mealTime: '17:00', carb: 80.0, protein: 40.0, fat: 20.0),
-      MealTemplate(dayType: 'leg', mealOrder: 3, mealTime: '21:00', carb: 24.0, protein: 0.0, fat: 0.0, isPreWorkout: true),
-      MealTemplate(dayType: 'leg', mealOrder: 4, mealTime: '22:30', carb: 96.0, protein: 40.0, fat: 16.0, isPostWorkout: true),
-
-      // 练肩日
-      MealTemplate(dayType: 'shoulder', mealOrder: 1, mealTime: '11:00', carb: 80.0, protein: 40.0, fat: 20.0),
-      MealTemplate(dayType: 'shoulder', mealOrder: 2, mealTime: '17:00', carb: 80.0, protein: 40.0, fat: 20.0),
-      MealTemplate(dayType: 'shoulder', mealOrder: 3, mealTime: '22:30', carb: 40.0, protein: 40.0, fat: 16.0, isPostWorkout: true),
+    const dayTypes = <String>[
+      'rest',
+      'back',
+      'chest',
+      'leg',
+      'shoulder',
+      'cardio'
     ];
 
-    for (final template in templates) {
-      final key = '${template.dayType}_${template.mealOrder}';
-      await mealTemplatesBoxInstance.put(key, template);
+    for (final dayType in dayTypes) {
+      final templates = DietConstants.getMealTemplatesForDayType(dayType);
+      for (final template in templates) {
+        final mealTemplate = MealTemplate(
+          dayType: dayType,
+          mealOrder: template['meal_order'] as int,
+          mealTime: template['meal_time'] as String,
+          carb: (template['carb'] as num).toDouble(),
+          protein: (template['protein'] as num).toDouble(),
+          fat: (template['fat'] as num).toDouble(),
+          isPreWorkout: template['is_pre_workout'] as bool,
+          isPostWorkout: template['is_post_workout'] as bool,
+        );
+        final key = '${mealTemplate.dayType}_${mealTemplate.mealOrder}';
+        await mealTemplatesBoxInstance.put(key, mealTemplate);
+      }
     }
   }
 
@@ -211,23 +217,140 @@ class HiveHelper {
     // 常用食材预设
     final ingredients = [
       // 碳水类
-      Ingredient(id: 'ing_1', name: '熟米饭', category: 'carb', carbPer100g: 26.0, proteinPer100g: 2.6, fatPer100g: 0.3, isCooked: true, isCommon: true, unit: 'g'),
-      Ingredient(id: 'ing_2', name: '燕麦片', category: 'carb', carbPer100g: 60.0, proteinPer100g: 12.0, fatPer100g: 6.0, isCooked: false, isCommon: true, unit: 'g'),
-      Ingredient(id: 'ing_3', name: '红薯', category: 'carb', carbPer100g: 20.0, proteinPer100g: 1.0, fatPer100g: 0.1, isCooked: false, isCommon: true, unit: 'g'),
-      Ingredient(id: 'ing_4', name: '香蕉', category: 'carb', carbPer100g: 23.0, proteinPer100g: 1.1, fatPer100g: 0.2, isCooked: false, isCommon: true, unit: 'g'),
-      Ingredient(id: 'ing_5', name: '全麦面包', category: 'carb', carbPer100g: 45.0, proteinPer100g: 8.0, fatPer100g: 3.0, isCooked: false, isCommon: true, unit: '片'),
+      Ingredient(
+          id: 'ing_1',
+          name: '熟米饭',
+          category: 'carb',
+          carbPer100g: 26.0,
+          proteinPer100g: 2.6,
+          fatPer100g: 0.3,
+          isCooked: true,
+          isCommon: true,
+          unit: 'g'),
+      Ingredient(
+          id: 'ing_2',
+          name: '燕麦片',
+          category: 'carb',
+          carbPer100g: 60.0,
+          proteinPer100g: 12.0,
+          fatPer100g: 6.0,
+          isCooked: false,
+          isCommon: true,
+          unit: 'g'),
+      Ingredient(
+          id: 'ing_3',
+          name: '红薯',
+          category: 'carb',
+          carbPer100g: 20.0,
+          proteinPer100g: 1.0,
+          fatPer100g: 0.1,
+          isCooked: false,
+          isCommon: true,
+          unit: 'g'),
+      Ingredient(
+          id: 'ing_4',
+          name: '香蕉',
+          category: 'carb',
+          carbPer100g: 23.0,
+          proteinPer100g: 1.1,
+          fatPer100g: 0.2,
+          isCooked: false,
+          isCommon: true,
+          unit: 'g'),
+      Ingredient(
+          id: 'ing_5',
+          name: '全麦面包',
+          category: 'carb',
+          carbPer100g: 45.0,
+          proteinPer100g: 8.0,
+          fatPer100g: 3.0,
+          isCooked: false,
+          isCommon: true,
+          unit: '片'),
 
       // 蛋白质类
-      Ingredient(id: 'ing_6', name: '鸡胸肉', category: 'protein', carbPer100g: 0.0, proteinPer100g: 31.0, fatPer100g: 3.6, isCooked: false, isCommon: true, unit: 'g'),
-      Ingredient(id: 'ing_7', name: '鸡蛋', category: 'protein', carbPer100g: 1.1, proteinPer100g: 13.0, fatPer100g: 11.0, isCooked: false, isCommon: true, unit: '个'),
-      Ingredient(id: 'ing_8', name: '蛋白粉', category: 'protein', carbPer100g: 5.0, proteinPer100g: 80.0, fatPer100g: 3.0, isCooked: false, isCommon: true, unit: '勺'),
-      Ingredient(id: 'ing_9', name: '牛肉', category: 'protein', carbPer100g: 0.0, proteinPer100g: 26.0, fatPer100g: 15.0, isCooked: false, isCommon: true, unit: 'g'),
-      Ingredient(id: 'ing_10', name: '鱼', category: 'protein', carbPer100g: 0.0, proteinPer100g: 20.0, fatPer100g: 5.0, isCooked: false, isCommon: true, unit: 'g'),
+      Ingredient(
+          id: 'ing_6',
+          name: '鸡胸肉',
+          category: 'protein',
+          carbPer100g: 0.0,
+          proteinPer100g: 31.0,
+          fatPer100g: 3.6,
+          isCooked: false,
+          isCommon: true,
+          unit: 'g'),
+      Ingredient(
+          id: 'ing_7',
+          name: '鸡蛋',
+          category: 'protein',
+          carbPer100g: 1.1,
+          proteinPer100g: 13.0,
+          fatPer100g: 11.0,
+          isCooked: false,
+          isCommon: true,
+          unit: '个'),
+      Ingredient(
+          id: 'ing_8',
+          name: '蛋白粉',
+          category: 'protein',
+          carbPer100g: 5.0,
+          proteinPer100g: 80.0,
+          fatPer100g: 3.0,
+          isCooked: false,
+          isCommon: true,
+          unit: '勺'),
+      Ingredient(
+          id: 'ing_9',
+          name: '牛肉',
+          category: 'protein',
+          carbPer100g: 0.0,
+          proteinPer100g: 26.0,
+          fatPer100g: 15.0,
+          isCooked: false,
+          isCommon: true,
+          unit: 'g'),
+      Ingredient(
+          id: 'ing_10',
+          name: '鱼',
+          category: 'protein',
+          carbPer100g: 0.0,
+          proteinPer100g: 20.0,
+          fatPer100g: 5.0,
+          isCooked: false,
+          isCommon: true,
+          unit: 'g'),
 
       // 脂肪类
-      Ingredient(id: 'ing_11', name: '橄榄油', category: 'fat', carbPer100g: 0.0, proteinPer100g: 0.0, fatPer100g: 100.0, isCooked: false, isCommon: true, unit: 'ml'),
-      Ingredient(id: 'ing_12', name: '坚果', category: 'fat', carbPer100g: 20.0, proteinPer100g: 15.0, fatPer100g: 50.0, isCooked: false, isCommon: true, unit: 'g'),
-      Ingredient(id: 'ing_13', name: '花生酱', category: 'fat', carbPer100g: 20.0, proteinPer100g: 25.0, fatPer100g: 50.0, isCooked: false, isCommon: true, unit: 'g'),
+      Ingredient(
+          id: 'ing_11',
+          name: '橄榄油',
+          category: 'fat',
+          carbPer100g: 0.0,
+          proteinPer100g: 0.0,
+          fatPer100g: 100.0,
+          isCooked: false,
+          isCommon: true,
+          unit: 'ml'),
+      Ingredient(
+          id: 'ing_12',
+          name: '坚果',
+          category: 'fat',
+          carbPer100g: 20.0,
+          proteinPer100g: 15.0,
+          fatPer100g: 50.0,
+          isCooked: false,
+          isCommon: true,
+          unit: 'g'),
+      Ingredient(
+          id: 'ing_13',
+          name: '花生酱',
+          category: 'fat',
+          carbPer100g: 20.0,
+          proteinPer100g: 25.0,
+          fatPer100g: 50.0,
+          isCooked: false,
+          isCommon: true,
+          unit: 'g'),
     ];
 
     for (final ingredient in ingredients) {

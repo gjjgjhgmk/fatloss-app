@@ -229,6 +229,7 @@ class _IngredientPageState extends State<IngredientPage> {
 
   void _showIngredientDialog(Ingredient? ingredient) {
     final isEdit = ingredient != null;
+    final focusNode = FocusNode();
     final nameController = TextEditingController(text: ingredient?.name ?? '');
     final carbController = TextEditingController(
       text: ingredient?.carbPer100g.toString() ?? '',
@@ -246,130 +247,139 @@ class _IngredientPageState extends State<IngredientPage> {
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(isEdit ? '编辑食材' : '添加食材'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: '食材名称'),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: category,
-                  decoration: const InputDecoration(labelText: '类别'),
-                  items: const [
-                    DropdownMenuItem(value: 'carb', child: Text('碳水类')),
-                    DropdownMenuItem(value: 'protein', child: Text('蛋白质类')),
-                    DropdownMenuItem(value: 'fat', child: Text('脂肪类')),
-                  ],
-                  onChanged: (value) {
-                    setDialogState(() {
-                      category = value!;
-                    });
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: carbController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: '碳水 (g/100g)',
+        builder: (context, setDialogState) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (focusNode.canRequestFocus) {
+              focusNode.requestFocus();
+            }
+          });
+          return AlertDialog(
+            title: Text(isEdit ? '编辑食材' : '添加食材'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    focusNode: focusNode,
+                    decoration: const InputDecoration(labelText: '食材名称'),
                   ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: proteinController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: '蛋白质 (g/100g)',
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: category,
+                    decoration: const InputDecoration(labelText: '类别'),
+                    items: const [
+                      DropdownMenuItem(value: 'carb', child: Text('碳水类')),
+                      DropdownMenuItem(value: 'protein', child: Text('蛋白质类')),
+                      DropdownMenuItem(value: 'fat', child: Text('脂肪类')),
+                    ],
+                    onChanged: (value) {
+                      setDialogState(() {
+                        category = value!;
+                      });
+                    },
                   ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: fatController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: '脂肪 (g/100g)',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Checkbox(
-                      value: isCommon,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          isCommon = value!;
-                        });
-                      },
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: carbController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '碳水 (g/100g)',
                     ),
-                    const Text('常用食材'),
-                  ],
-                ),
-                Row(
-                  children: [
-                    Checkbox(
-                      value: isCooked,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          isCooked = value!;
-                        });
-                      },
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: proteinController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '蛋白质 (g/100g)',
                     ),
-                    const Text('熟食'),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: fatController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '脂肪 (g/100g)',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: isCommon,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            isCommon = value!;
+                          });
+                        },
+                      ),
+                      const Text('常用食材'),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: isCooked,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            isCooked = value!;
+                          });
+                        },
+                      ),
+                      const Text('熟食'),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final name = nameController.text.trim();
-                final carb = double.tryParse(carbController.text) ?? 0;
-                final protein = double.tryParse(proteinController.text) ?? 0;
-                final fat = double.tryParse(fatController.text) ?? 0;
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final name = nameController.text.trim();
+                  final carb = double.tryParse(carbController.text) ?? 0;
+                  final protein = double.tryParse(proteinController.text) ?? 0;
+                  final fat = double.tryParse(fatController.text) ?? 0;
 
-                if (name.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('请输入食材名称')),
+                  if (name.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('请输入食材名称')),
+                    );
+                    return;
+                  }
+
+                  final newIngredient = Ingredient(
+                    id: ingredient?.id ?? _uuid.v4(),
+                    name: name,
+                    category: category,
+                    carbPer100g: carb,
+                    proteinPer100g: protein,
+                    fatPer100g: fat,
+                    isCommon: isCommon,
+                    isCooked: isCooked,
                   );
-                  return;
-                }
 
-                final newIngredient = Ingredient(
-                  id: ingredient?.id ?? _uuid.v4(),
-                  name: name,
-                  category: category,
-                  carbPer100g: carb,
-                  proteinPer100g: protein,
-                  fatPer100g: fat,
-                  isCommon: isCommon,
-                  isCooked: isCooked,
-                );
+                  if (isEdit) {
+                    await _repo.updateIngredient(newIngredient);
+                  } else {
+                    await _repo.insertIngredient(newIngredient);
+                  }
 
-                if (isEdit) {
-                  await _repo.updateIngredient(newIngredient);
-                } else {
-                  await _repo.insertIngredient(newIngredient);
-                }
-
-                Navigator.pop(context);
-                _loadIngredients();
-              },
-              child: Text(isEdit ? '保存' : '添加'),
-            ),
-          ],
-        ),
+                  Navigator.pop(context);
+                  _loadIngredients();
+                },
+                child: Text(isEdit ? '保存' : '添加'),
+              ),
+            ],
+          );
+        },
       ),
     );
+    focusNode.dispose();
   }
 
   Future<void> _scanBarcodeAndAddIngredient() async {

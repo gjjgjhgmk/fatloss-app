@@ -35,6 +35,11 @@ class _PublicViewPageState extends State<PublicViewPage> {
   List<_MealCardData> _todayMeals = <_MealCardData>[];
   _WorkoutCardData? _todayWorkout;
   _FastingWeightData? _todayFastingWeight;
+  _MacroTarget _todayMacroTarget = const _MacroTarget(
+    carb: 0,
+    protein: 0,
+    fat: 0,
+  );
   int _secretTapCount = 0;
   DateTime? _lastSecretTapAt;
 
@@ -60,6 +65,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
         _fetchTodayFastingWeight(today),
         _fetchTodayMeals(today),
         _fetchTodayWorkout(today),
+        _fetchTodayMacroTarget(today),
       ]);
 
       if (!mounted) return;
@@ -70,6 +76,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
         _todayFastingWeight = results[2] as _FastingWeightData?;
         _todayMeals = results[3] as List<_MealCardData>;
         _todayWorkout = results[4] as _WorkoutCardData?;
+        _todayMacroTarget = results[5] as _MacroTarget;
         _selectedDay = today;
         _loading = false;
       });
@@ -275,6 +282,69 @@ class _PublicViewPageState extends State<PublicViewPage> {
       recordTime: row['record_time'] as String?,
       photoUrl: _extractPhotoUrl(row['notes'] as String?),
     );
+  }
+
+  Future<_MacroTarget> _fetchTodayMacroTarget(DateTime today) async {
+    final dateStr = _formatDate(today);
+    String dayType = 'rest';
+
+    try {
+      final workoutRaw = await SupabaseConfig.client
+          .from('workout_records')
+          .select('day_type')
+          .eq('record_date', dateStr)
+          .order('updated_at', ascending: false)
+          .limit(1);
+      final workoutRows = _rows(workoutRaw);
+      if (workoutRows.isNotEmpty) {
+        dayType = (workoutRows.first['day_type'] as String?) ?? dayType;
+      } else {
+        final mealRaw = await SupabaseConfig.client
+            .from('daily_meal_records')
+            .select('day_type')
+            .eq('record_date', dateStr)
+            .order('updated_at', ascending: false)
+            .limit(1);
+        final mealRows = _rows(mealRaw);
+        if (mealRows.isNotEmpty) {
+          dayType = (mealRows.first['day_type'] as String?) ?? dayType;
+        } else {
+          dayType = DateTypeResolver.resolveDayType(today);
+        }
+      }
+    } catch (_) {
+      dayType = DateTypeResolver.resolveDayType(today);
+    }
+
+    try {
+      final raw = await SupabaseConfig.client
+          .from('diet_rules')
+          .select('total_carb, total_protein, total_fat')
+          .eq('day_type', dayType)
+          .limit(1);
+      final rows = _rows(raw);
+      if (rows.isNotEmpty) {
+        final row = rows.first;
+        return _MacroTarget(
+          carb: _toDouble(row['total_carb']) ?? 0,
+          protein: _toDouble(row['total_protein']) ?? 0,
+          fat: _toDouble(row['total_fat']) ?? 0,
+        );
+      }
+    } catch (_) {
+      // Ignore and fallback to local template totals.
+    }
+
+    final templates = DateTypeResolver.getMealTemplatesForDayType(dayType);
+    double carb = 0;
+    double protein = 0;
+    double fat = 0;
+    for (final template in templates) {
+      carb += _toDouble(template['carb']) ?? 0;
+      protein += _toDouble(template['protein']) ?? 0;
+      fat += _toDouble(template['fat']) ?? 0;
+    }
+    return _MacroTarget(carb: carb, protein: protein, fat: fat);
   }
 
   Future<_DailyHistoryData> _fetchHistoryForDate(DateTime day) async {
@@ -997,6 +1067,7 @@ class _PublicViewPageState extends State<PublicViewPage> {
 
   Future<void> _showAdminAuthDialog() async {
     final controller = TextEditingController();
+    final focusNode = FocusNode();
     String? errorText;
 
     await showDialog<void>(
@@ -1005,11 +1076,16 @@ class _PublicViewPageState extends State<PublicViewPage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (focusNode.canRequestFocus) {
+                focusNode.requestFocus();
+              }
+            });
             return AlertDialog(
               title: const Text('输入管理密码'),
               content: TextField(
                 controller: controller,
-                autofocus: true,
+                focusNode: focusNode,
                 obscureText: true,
                 decoration: InputDecoration(
                   hintText: '请输入密码',
@@ -1055,6 +1131,8 @@ class _PublicViewPageState extends State<PublicViewPage> {
         );
       },
     );
+
+    focusNode.dispose();
   }
 
   Future<bool> _verifyAdminPassword(String input) async {
@@ -1080,26 +1158,20 @@ class _PublicViewPageState extends State<PublicViewPage> {
   }
 
   _MacroSummary _buildMacroSummary() {
-    double plannedCarb = 0;
-    double plannedProtein = 0;
-    double plannedFat = 0;
     double actualCarb = 0;
     double actualProtein = 0;
     double actualFat = 0;
 
     for (final meal in _todayMeals) {
-      plannedCarb += meal.plannedCarb;
-      plannedProtein += meal.plannedProtein;
-      plannedFat += meal.plannedFat;
       actualCarb += meal.actualCarb;
       actualProtein += meal.actualProtein;
       actualFat += meal.actualFat;
     }
 
     return _MacroSummary(
-      plannedCarb: plannedCarb,
-      plannedProtein: plannedProtein,
-      plannedFat: plannedFat,
+      plannedCarb: _todayMacroTarget.carb,
+      plannedProtein: _todayMacroTarget.protein,
+      plannedFat: _todayMacroTarget.fat,
       actualCarb: actualCarb,
       actualProtein: actualProtein,
       actualFat: actualFat,
@@ -2003,6 +2075,18 @@ class _MacroSummary {
     required this.actualCarb,
     required this.actualProtein,
     required this.actualFat,
+  });
+}
+
+class _MacroTarget {
+  final double carb;
+  final double protein;
+  final double fat;
+
+  const _MacroTarget({
+    required this.carb,
+    required this.protein,
+    required this.fat,
   });
 }
 

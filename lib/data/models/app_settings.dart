@@ -11,13 +11,18 @@ class AppSettings extends HiveObject {
   int skippedDays;
 
   @HiveField(2)
-  List<String> cardioDays; // 格式: "YYYY-MM-DD"
+  List<String> cardioDays;
+
+  @HiveField(3)
+  List<String> manualRestDays;
 
   AppSettings({
     required this.cycleStartDate,
     this.skippedDays = 0,
     List<String>? cardioDays,
-  }) : cardioDays = cardioDays ?? [];
+    List<String>? manualRestDays,
+  })  : cardioDays = cardioDays ?? <String>[],
+        manualRestDays = manualRestDays ?? <String>[];
 
   bool isCardioDay(String dateStr) => cardioDays.contains(dateStr);
 
@@ -31,15 +36,29 @@ class AppSettings extends HiveObject {
     cardioDays.remove(dateStr);
   }
 
+  bool isManualRestDay(String dateStr) => manualRestDays.contains(dateStr);
+
+  void addManualRestDay(String dateStr) {
+    if (!manualRestDays.contains(dateStr)) {
+      manualRestDays.add(dateStr);
+    }
+  }
+
+  void removeManualRestDay(String dateStr) {
+    manualRestDays.remove(dateStr);
+  }
+
   AppSettings copyWith({
     DateTime? cycleStartDate,
     int? skippedDays,
     List<String>? cardioDays,
+    List<String>? manualRestDays,
   }) {
     return AppSettings(
       cycleStartDate: cycleStartDate ?? this.cycleStartDate,
       skippedDays: skippedDays ?? this.skippedDays,
       cardioDays: cardioDays ?? List<String>.from(this.cardioDays),
+      manualRestDays: manualRestDays ?? List<String>.from(this.manualRestDays),
     );
   }
 }

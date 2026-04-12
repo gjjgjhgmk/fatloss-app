@@ -58,6 +58,7 @@ class _HomePageState extends State<HomePage> {
     if (isVerified) return;
 
     final controller = TextEditingController();
+    final focusNode = FocusNode();
     String? errorText;
 
     await showDialog<void>(
@@ -68,6 +69,11 @@ class _HomePageState extends State<HomePage> {
           canPop: false,
           child: StatefulBuilder(
             builder: (context, setDialogState) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (focusNode.canRequestFocus) {
+                  focusNode.requestFocus();
+                }
+              });
               return AlertDialog(
                 title: const Text('请输入编辑密码'),
                 content: Column(
@@ -75,8 +81,8 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     TextField(
                       controller: controller,
+                      focusNode: focusNode,
                       obscureText: true,
-                      autofocus: true,
                       decoration: InputDecoration(
                         hintText: '编辑密码',
                         errorText: errorText,
@@ -120,6 +126,8 @@ class _HomePageState extends State<HomePage> {
         );
       },
     );
+
+    focusNode.dispose();
   }
 
   Future<void> _verifyPassword({
@@ -162,7 +170,8 @@ class _HomePageState extends State<HomePage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(provider.error!, style: const TextStyle(color: Colors.red)),
+                  Text(provider.error!,
+                      style: const TextStyle(color: Colors.red)),
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () => provider.loadDailyStatus(),
@@ -184,9 +193,11 @@ class _HomePageState extends State<HomePage> {
               slivers: [
                 SliverToBoxAdapter(child: _buildAppBar(context, provider)),
                 SliverToBoxAdapter(child: _buildMonthlyGoal(context, provider)),
-                SliverToBoxAdapter(child: _buildDayTypeSelector(context, provider)),
+                SliverToBoxAdapter(
+                    child: _buildDayTypeSelector(context, provider)),
                 SliverToBoxAdapter(child: _buildNutritionProgress(status)),
-                SliverToBoxAdapter(child: _buildMealList(context, provider, status)),
+                SliverToBoxAdapter(
+                    child: _buildMealList(context, provider, status)),
                 const SliverToBoxAdapter(child: SizedBox(height: 100)),
               ],
             ),
@@ -199,7 +210,9 @@ class _HomePageState extends State<HomePage> {
   Widget _buildAppBar(BuildContext context, DietProvider provider) {
     final dateFormat = DateFormat('M月d日 E');
     final status = provider.dailyStatus;
-    final dayColor = Color(WorkoutConstants.DAY_TYPE_COLORS[status?.dayType ?? 'rest'] ?? 0xFF9E9E9E);
+    final dayColor = Color(
+        WorkoutConstants.DAY_TYPE_COLORS[status?.dayType ?? 'rest'] ??
+            0xFF9E9E9E);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
@@ -246,7 +259,8 @@ class _HomePageState extends State<HomePage> {
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.monitor_weight, color: Colors.white70),
+                    icon:
+                        const Icon(Icons.monitor_weight, color: Colors.white70),
                     onPressed: () => _navigateToWeightRecord(context),
                     tooltip: '体重记录',
                   ),
@@ -256,7 +270,8 @@ class _HomePageState extends State<HomePage> {
                     tooltip: '腰围记录',
                   ),
                   IconButton(
-                    icon: const Icon(Icons.restaurant_menu, color: Colors.white70),
+                    icon: const Icon(Icons.restaurant_menu,
+                        color: Colors.white70),
                     onPressed: () => _navigateToIngredients(context),
                     tooltip: '食材库',
                   ),
@@ -276,10 +291,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildDayTypeChips(BuildContext context, DietProvider provider, DailyDietStatus? status) {
+  Widget _buildDayTypeChips(
+      BuildContext context, DietProvider provider, DailyDietStatus? status) {
     final currentDayType = status?.dayType ?? 'rest';
     final isCardio = status?.isCardioDay ?? false;
-    final dayColor = Color(WorkoutConstants.DAY_TYPE_COLORS[currentDayType] ?? 0xFF9E9E9E);
+    final dayColor =
+        Color(WorkoutConstants.DAY_TYPE_COLORS[currentDayType] ?? 0xFF9E9E9E);
 
     return Wrap(
       spacing: 8,
@@ -293,7 +310,8 @@ class _HomePageState extends State<HomePage> {
             currentDayType,
             true,
             dayColor,
-            () => _navigateToWorkout(context, provider.selectedDate, currentDayType),
+            () => _navigateToWorkout(
+                context, provider.selectedDate, currentDayType),
           ),
         // 空腹有氧标签（如果启用）
         if (isCardio)
@@ -303,7 +321,8 @@ class _HomePageState extends State<HomePage> {
             'cardio',
             true,
             const Color(0xFFE91E63),
-            () => _navigateToWorkout(context, provider.selectedDate, currentDayType),
+            () => _navigateToWorkout(
+                context, provider.selectedDate, currentDayType),
           ),
         // 休息日显示休息标签
         if (currentDayType == 'rest')
@@ -368,7 +387,8 @@ class _HomePageState extends State<HomePage> {
 
     double weightLoss = startWeight - latestWeight;
     double totalGoal = startWeight - goalWeight;
-    double progress = totalGoal > 0 ? (weightLoss / totalGoal).clamp(0.0, 1.0) : 0.0;
+    double progress =
+        totalGoal > 0 ? (weightLoss / totalGoal).clamp(0.0, 1.0) : 0.0;
     double remaining = latestWeight - goalWeight;
     final bool isGoalAchieved = remaining <= 0;
 
@@ -424,7 +444,10 @@ class _HomePageState extends State<HomePage> {
                 ),
                 child: Text(
                   isGoalAchieved ? '已达成!' : '再接再励',
-                  style: TextStyle(color: progressColor, fontSize: 12, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: progressColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -454,7 +477,10 @@ class _HomePageState extends State<HomePage> {
                   ),
                   Text(
                     '-${weightLoss.toStringAsFixed(1)} kg',
-                    style: TextStyle(color: progressColor, fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        color: progressColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -474,12 +500,17 @@ class _HomePageState extends State<HomePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('0%', style: TextStyle(color: Colors.grey, fontSize: 10)),
+              const Text('0%',
+                  style: TextStyle(color: Colors.grey, fontSize: 10)),
               Text(
                 '${(progress * 100).toInt()}%',
-                style: TextStyle(color: progressColor, fontSize: 12, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: progressColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold),
               ),
-              const Text('100%', style: TextStyle(color: Colors.grey, fontSize: 10)),
+              const Text('100%',
+                  style: TextStyle(color: Colors.grey, fontSize: 10)),
             ],
           ),
         ],
@@ -495,11 +526,12 @@ class _HomePageState extends State<HomePage> {
 
     // 同一天优先取晚上体重，避免最新日期里随机取到早上/晚上。
     final latestDate = records.first.recordDate;
-    final sameDateRecords = records.where((r) => r.recordDate == latestDate).toList()
-      ..sort((a, b) {
-        if (a.timeOfDay == b.timeOfDay) return 0;
-        return a.timeOfDay == 'evening' ? -1 : 1;
-      });
+    final sameDateRecords =
+        records.where((r) => r.recordDate == latestDate).toList()
+          ..sort((a, b) {
+            if (a.timeOfDay == b.timeOfDay) return 0;
+            return a.timeOfDay == 'evening' ? -1 : 1;
+          });
 
     return sameDateRecords.first.weight;
   }
@@ -508,7 +540,8 @@ class _HomePageState extends State<HomePage> {
     final status = provider.dailyStatus;
     if (status == null) return const SizedBox();
 
-    final dayColor = Color(WorkoutConstants.DAY_TYPE_COLORS[status.dayType] ?? 0xFF9E9E9E);
+    final dayColor =
+        Color(WorkoutConstants.DAY_TYPE_COLORS[status.dayType] ?? 0xFF9E9E9E);
     final isCardio = status.isCardioDay;
 
     return Container(
@@ -557,10 +590,12 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               TextButton(
-                onPressed: () => _navigateToWorkout(context, provider.selectedDate, status.dayType),
+                onPressed: () => _navigateToWorkout(
+                    context, provider.selectedDate, status.dayType),
                 style: TextButton.styleFrom(
                   backgroundColor: dayColor.withOpacity(0.2),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -585,8 +620,7 @@ class _HomePageState extends State<HomePage> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () async {
-                      await DateTypeResolver.setRestDay(provider.selectedDate, true);
-                      await provider.loadDailyStatus();
+                      await provider.setSelectedDateAsRestDay();
                     },
                     icon: const Icon(Icons.hotel, size: 18),
                     label: const Text('设为休息日'),
@@ -601,7 +635,8 @@ class _HomePageState extends State<HomePage> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () async {
-                    await DateTypeResolver.setCardioDay(provider.selectedDate, !isCardio);
+                    await DateTypeResolver.setCardioDay(
+                        provider.selectedDate, !isCardio);
                     await provider.loadDailyStatus();
                   },
                   icon: Icon(
@@ -610,8 +645,10 @@ class _HomePageState extends State<HomePage> {
                   ),
                   label: const Text('空腹有氧'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: isCardio ? Colors.pink : Colors.pink.shade300,
-                    side: BorderSide(color: isCardio ? Colors.pink : Colors.pink.shade300),
+                    foregroundColor:
+                        isCardio ? Colors.pink : Colors.pink.shade300,
+                    side: BorderSide(
+                        color: isCardio ? Colors.pink : Colors.pink.shade300),
                   ),
                 ),
               ),
@@ -639,22 +676,29 @@ class _HomePageState extends State<HomePage> {
               SizedBox(width: 8),
               Text(
                 '营养素进度',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold),
               ),
             ],
           ),
           const SizedBox(height: 20),
-          _buildNutritionBar('碳水', status.totalActual.carb, status.plannedCarb, Colors.orange),
+          _buildNutritionBar(
+              '碳水', status.totalActual.carb, status.plannedCarb, Colors.orange),
           const SizedBox(height: 12),
-          _buildNutritionBar('蛋白质', status.totalActual.protein, status.plannedProtein, Colors.red),
+          _buildNutritionBar('蛋白质', status.totalActual.protein,
+              status.plannedProtein, Colors.red),
           const SizedBox(height: 12),
-          _buildNutritionBar('脂肪', status.totalActual.fat, status.plannedFat, Colors.blue),
+          _buildNutritionBar(
+              '脂肪', status.totalActual.fat, status.plannedFat, Colors.blue),
         ],
       ),
     );
   }
 
-  Widget _buildNutritionBar(String label, double actual, double planned, Color color) {
+  Widget _buildNutritionBar(
+      String label, double actual, double planned, Color color) {
     final progress = planned > 0 ? (actual / planned).clamp(0.0, 1.5) : 0.0;
     final percentage = (progress * 100).toInt();
 
@@ -685,7 +729,8 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildMealList(BuildContext context, DietProvider provider, DailyDietStatus status) {
+  Widget _buildMealList(
+      BuildContext context, DietProvider provider, DailyDietStatus status) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Column(
@@ -696,17 +741,22 @@ class _HomePageState extends State<HomePage> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.restaurant, color: Color(0xFF00D9FF), size: 20),
+                  const Icon(Icons.restaurant,
+                      color: Color(0xFF00D9FF), size: 20),
                   const SizedBox(width: 8),
                   Text(
                     '今日餐次 (${status.completedMeals}/${status.totalMeals})',
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
               if (status.skippedMeals > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.grey.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
@@ -719,7 +769,8 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
           const SizedBox(height: 16),
-          ...status.meals.map((meal) => _buildMealCard(context, provider, meal)),
+          ...status.meals
+              .map((meal) => _buildMealCard(context, provider, meal)),
         ],
       ),
     );
@@ -752,7 +803,9 @@ class _HomePageState extends State<HomePage> {
         border: Border.all(color: statusColor.withOpacity(0.3)),
       ),
       child: InkWell(
-        onTap: meal.isSkipped ? null : () => _navigateToMealRecord(context, meal.mealOrder),
+        onTap: meal.isSkipped
+            ? null
+            : () => _navigateToMealRecord(context, meal.mealOrder),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -775,11 +828,13 @@ class _HomePageState extends State<HomePage> {
                       children: [
                         Text(
                           mealLabel,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                              color: Colors.white, fontWeight: FontWeight.bold),
                         ),
                         if (meal.hasPhoto) ...[
                           const SizedBox(width: 8),
-                          const Icon(Icons.photo_camera, size: 16, color: Colors.green),
+                          const Icon(Icons.photo_camera,
+                              size: 16, color: Colors.green),
                         ],
                       ],
                     ),
@@ -798,7 +853,8 @@ class _HomePageState extends State<HomePage> {
               ),
               if (!meal.isSkipped && !meal.isCompleted)
                 ElevatedButton(
-                  onPressed: () => _navigateToMealRecord(context, meal.mealOrder),
+                  onPressed: () =>
+                      _navigateToMealRecord(context, meal.mealOrder),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF00D9FF),
                     foregroundColor: Colors.black,
@@ -808,7 +864,8 @@ class _HomePageState extends State<HomePage> {
               if (meal.isCompleted)
                 IconButton(
                   icon: const Icon(Icons.edit, color: Colors.grey),
-                  onPressed: () => _navigateToMealRecord(context, meal.mealOrder),
+                  onPressed: () =>
+                      _navigateToMealRecord(context, meal.mealOrder),
                 ),
             ],
           ),

@@ -214,6 +214,7 @@ class _WeightRecordPageState extends State<WeightRecordPage> {
 
   void _showAddDialog(String timeOfDay) {
     final weightController = TextEditingController();
+    final focusNode = FocusNode();
     final timeController = TextEditingController(
       text: timeOfDay == 'morning'
           ? DateFormat('HH:mm').format(DateTime.now())
@@ -227,107 +228,117 @@ class _WeightRecordPageState extends State<WeightRecordPage> {
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: Text('记录${timeOfDay == 'morning' ? '早上' : '晚上'}体重'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: weightController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: '体重 (kg)',
-                      hintText: '例如: 80.5',
+          builder: (context, setDialogState) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (focusNode.canRequestFocus) {
+                focusNode.requestFocus();
+              }
+            });
+            return AlertDialog(
+              title: Text('记录${timeOfDay == 'morning' ? '早上' : '晚上'}体重'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: weightController,
+                      focusNode: focusNode,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: '体重 (kg)',
+                        hintText: '例如: 80.5',
+                      ),
                     ),
-                    autofocus: true,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: timeController,
-                    decoration: const InputDecoration(
-                      labelText: '时间 (HH:mm)',
-                      hintText: '例如: 08:30',
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: timeController,
+                      decoration: const InputDecoration(
+                        labelText: '时间 (HH:mm)',
+                        hintText: '例如: 08:30',
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildPhotoUploader(
-                    isUploading: isUploadingPhoto,
-                    photoUrl: photoUrl,
-                    previewBytes: photoPreviewBytes,
-                    onUpload: () async {
-                      try {
+                    const SizedBox(height: 16),
+                    _buildPhotoUploader(
+                      isUploading: isUploadingPhoto,
+                      photoUrl: photoUrl,
+                      previewBytes: photoPreviewBytes,
+                      onUpload: () async {
+                        try {
+                          setDialogState(() {
+                            isUploadingPhoto = true;
+                          });
+                          final uploaded = await _pickAndUploadWeightPhoto(
+                            recordDate: _selectedDate,
+                            timeOfDay: timeOfDay,
+                          );
+                          if (uploaded == null) return;
+                          setDialogState(() {
+                            photoUrl = uploaded.url;
+                            photoPreviewBytes = uploaded.bytes;
+                          });
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('图片上传失败: $e')),
+                          );
+                        } finally {
+                          setDialogState(() {
+                            isUploadingPhoto = false;
+                          });
+                        }
+                      },
+                      onClear: () {
                         setDialogState(() {
-                          isUploadingPhoto = true;
+                          photoUrl = null;
+                          photoPreviewBytes = null;
                         });
-                        final uploaded = await _pickAndUploadWeightPhoto(
-                          recordDate: _selectedDate,
-                          timeOfDay: timeOfDay,
-                        );
-                        if (uploaded == null) return;
-                        setDialogState(() {
-                          photoUrl = uploaded.url;
-                          photoPreviewBytes = uploaded.bytes;
-                        });
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('图片上传失败: $e')),
-                        );
-                      } finally {
-                        setDialogState(() {
-                          isUploadingPhoto = false;
-                        });
-                      }
-                    },
-                    onClear: () {
-                      setDialogState(() {
-                        photoUrl = null;
-                        photoPreviewBytes = null;
-                      });
-                    },
-                  ),
-                ],
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('取消'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  final weight = double.tryParse(weightController.text);
-                  if (weight != null && weight > 0) {
-                    final id = '${_selectedDate}_$timeOfDay';
-                    final record = WeightRecord(
-                      id: id,
-                      recordDate: _selectedDate,
-                      timeOfDay: timeOfDay,
-                      weight: weight,
-                      recordTime: timeController.text.isNotEmpty
-                          ? timeController.text
-                          : null,
-                      notes: photoUrl,
-                    );
-                    await _repo.saveWeightRecord(record);
-                    Navigator.pop(dialogContext);
-                    _loadRecords();
-                  }
-                },
-                child: const Text('保存'),
-              ),
-            ],
-          ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final weight = double.tryParse(weightController.text);
+                    if (weight != null && weight > 0) {
+                      final id = '${_selectedDate}_$timeOfDay';
+                      final record = WeightRecord(
+                        id: id,
+                        recordDate: _selectedDate,
+                        timeOfDay: timeOfDay,
+                        weight: weight,
+                        recordTime: timeController.text.isNotEmpty
+                            ? timeController.text
+                            : null,
+                        notes: photoUrl,
+                      );
+                      await _repo.saveWeightRecord(record);
+                      Navigator.pop(dialogContext);
+                      _loadRecords();
+                    }
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
+
+    focusNode.dispose();
   }
 
   void _showEditDialog(String timeOfDay, WeightRecord record) {
     final weightController =
         TextEditingController(text: record.weight.toString());
+    final focusNode = FocusNode();
     final timeController = TextEditingController(text: record.recordTime ?? '');
     final existingNotes = record.notes;
     String? photoUrl = _extractPhotoUrl(record.notes);
@@ -339,102 +350,114 @@ class _WeightRecordPageState extends State<WeightRecordPage> {
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: const Text('修改体重记录'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: weightController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: '体重 (kg)'),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: timeController,
-                    decoration: const InputDecoration(labelText: '时间 (HH:mm)'),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildPhotoUploader(
-                    isUploading: isUploadingPhoto,
-                    photoUrl: photoUrl,
-                    previewBytes: photoPreviewBytes,
-                    onUpload: () async {
-                      try {
+          builder: (context, setDialogState) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (focusNode.canRequestFocus) {
+                focusNode.requestFocus();
+              }
+            });
+            return AlertDialog(
+              title: const Text('修改体重记录'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: weightController,
+                      focusNode: focusNode,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: '体重 (kg)'),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: timeController,
+                      decoration:
+                          const InputDecoration(labelText: '时间 (HH:mm)'),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildPhotoUploader(
+                      isUploading: isUploadingPhoto,
+                      photoUrl: photoUrl,
+                      previewBytes: photoPreviewBytes,
+                      onUpload: () async {
+                        try {
+                          setDialogState(() {
+                            isUploadingPhoto = true;
+                          });
+                          final uploaded = await _pickAndUploadWeightPhoto(
+                            recordDate: record.recordDate,
+                            timeOfDay: timeOfDay,
+                          );
+                          if (uploaded == null) return;
+                          setDialogState(() {
+                            photoUrl = uploaded.url;
+                            photoPreviewBytes = uploaded.bytes;
+                            photoCleared = false;
+                          });
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('图片上传失败: $e')),
+                          );
+                        } finally {
+                          setDialogState(() {
+                            isUploadingPhoto = false;
+                          });
+                        }
+                      },
+                      onClear: () {
                         setDialogState(() {
-                          isUploadingPhoto = true;
+                          photoUrl = null;
+                          photoPreviewBytes = null;
+                          photoCleared = true;
                         });
-                        final uploaded = await _pickAndUploadWeightPhoto(
-                          recordDate: record.recordDate,
-                          timeOfDay: timeOfDay,
-                        );
-                        if (uploaded == null) return;
-                        setDialogState(() {
-                          photoUrl = uploaded.url;
-                          photoPreviewBytes = uploaded.bytes;
-                          photoCleared = false;
-                        });
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('图片上传失败: $e')),
-                        );
-                      } finally {
-                        setDialogState(() {
-                          isUploadingPhoto = false;
-                        });
-                      }
-                    },
-                    onClear: () {
-                      setDialogState(() {
-                        photoUrl = null;
-                        photoPreviewBytes = null;
-                        photoCleared = true;
-                      });
-                    },
-                  ),
-                ],
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  await _repo.deleteWeightRecord(record.id);
-                  Navigator.pop(dialogContext);
-                  _loadRecords();
-                },
-                child: const Text('删除', style: TextStyle(color: Colors.red)),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('取消'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  final weight = double.tryParse(weightController.text);
-                  if (weight != null && weight > 0) {
-                    final updated = record.copyWith(
-                      weight: weight,
-                      recordTime: timeController.text.isNotEmpty
-                          ? timeController.text
-                          : null,
-                      notes: photoUrl ?? (photoCleared ? null : existingNotes),
-                      updatedAt: DateTime.now(),
-                    );
-                    await _repo.saveWeightRecord(updated);
+              actions: [
+                TextButton(
+                  onPressed: () async {
+                    await _repo.deleteWeightRecord(record.id);
                     Navigator.pop(dialogContext);
                     _loadRecords();
-                  }
-                },
-                child: const Text('保存'),
-              ),
-            ],
-          ),
+                  },
+                  child: const Text('删除', style: TextStyle(color: Colors.red)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final weight = double.tryParse(weightController.text);
+                    if (weight != null && weight > 0) {
+                      final updated = record.copyWith(
+                        weight: weight,
+                        recordTime: timeController.text.isNotEmpty
+                            ? timeController.text
+                            : null,
+                        notes:
+                            photoUrl ?? (photoCleared ? null : existingNotes),
+                        updatedAt: DateTime.now(),
+                      );
+                      await _repo.saveWeightRecord(updated);
+                      Navigator.pop(dialogContext);
+                      _loadRecords();
+                    }
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
+
+    focusNode.dispose();
   }
 
   Widget _buildPhotoUploader({
