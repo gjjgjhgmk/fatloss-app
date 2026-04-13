@@ -109,74 +109,77 @@ class _MealRecordPageState extends State<MealRecordPage> {
           // 加载已保存的食材记录
           _loadExistingMealData(meal);
 
-          return Column(
-            children: [
-              // 餐次信息
-              Container(
-                padding: const EdgeInsets.all(16),
-                color: Theme.of(context).colorScheme.primaryContainer,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildMealInfo(
-                        '预设碳水', '${meal.plannedCarb.toStringAsFixed(0)}g'),
-                    _buildMealInfo(
-                        '预设蛋白', '${meal.plannedProtein.toStringAsFixed(0)}g'),
-                    _buildMealInfo(
-                        '预设脂肪', '${meal.plannedFat.toStringAsFixed(0)}g'),
-                  ],
-                ),
-              ),
-
-              _buildPhotoCheckinArea(),
-
-              // 已选食材（限制高度，可滚动）
-              if (_selectedItems.isNotEmpty)
+          return SingleChildScrollView(
+            child: Column(
+              children: [
+                // 餐次信息
                 Container(
-                  constraints: const BoxConstraints(maxHeight: 150),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                  padding: const EdgeInsets.all(16),
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              '已选食材',
-                              style: TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                            Text(
-                              '${_selectedItems.length}项',
-                              style: TextStyle(
-                                  color: Colors.grey[600], fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Flexible(
-                        child: ListView.builder(
-                          shrinkWrap: true,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: _selectedItems.length,
-                          itemBuilder: (context, index) =>
-                              _buildSelectedItem(_selectedItems[index]),
-                        ),
-                      ),
+                      _buildMealInfo(
+                          '预设碳水', '${meal.plannedCarb.toStringAsFixed(0)}g'),
+                      _buildMealInfo(
+                          '预设蛋白', '${meal.plannedProtein.toStringAsFixed(0)}g'),
+                      _buildMealInfo(
+                          '预设脂肪', '${meal.plannedFat.toStringAsFixed(0)}g'),
                     ],
                   ),
                 ),
 
-              // 实时营养素计算
-              _buildNutritionPreview(),
+                _buildPhotoCheckinArea(),
 
-              // 食材搜索和选择（占据剩余空间）
-              Expanded(
-                child: _buildIngredientSelector(provider),
-              ),
-            ],
+                // 已选食材（限制高度，可滚动）
+                if (_selectedItems.isNotEmpty)
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 150),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                '已选食材',
+                                style: TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                '${_selectedItems.length}项',
+                                style: TextStyle(
+                                    color: Colors.grey[600], fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Flexible(
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: _selectedItems.length,
+                            itemBuilder: (context, index) =>
+                                _buildSelectedItem(_selectedItems[index]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // 实时营养素计算
+                _buildNutritionPreview(),
+
+                // 食材搜索和选择（固定高度，屏幕约45%）
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.45,
+                  child: _buildIngredientSelector(provider),
+                ),
+              ],
+            ),
           );
         },
       ),
