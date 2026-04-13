@@ -98,6 +98,7 @@ class Ingredient extends HiveObject {
       'is_common': isCommon ? 1 : 0,
       'unit': unit,
       'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
     };
 
     // 兼容线上旧表结构：只有在需要时才同步库存字段。
