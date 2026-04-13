@@ -389,13 +389,26 @@ class _IngredientPageState extends State<IngredientPage> {
 
     try {
       final barcode = await _scanBarcodeWithCamera();
-      if (barcode == null || barcode.isEmpty) return;
+      if (barcode == null || barcode.isEmpty) {
+        // 用户取消扫码
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('正在查询: $barcode'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
 
       final food = await _fetchFoodFromOpenFoodFacts(barcode);
       if (food == null) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('未查询到该条码对应食品')),
+          const SnackBar(
+            content: Text('未查询到该条码对应食品，请尝试手动添加'),
+            duration: Duration(seconds: 3),
+          ),
         );
         return;
       }
@@ -425,8 +438,14 @@ class _IngredientPageState extends State<IngredientPage> {
       );
     } catch (e) {
       if (!mounted) return;
+      String errorMessage = '扫码添加失败';
+      if (e.toString().contains('超时')) {
+        errorMessage = '网络超时，请检查网络后重试';
+      } else if (e.toString().contains('network')) {
+        errorMessage = '网络错误，请检查网络连接';
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('扫码添加失败: $e')),
+        SnackBar(content: Text(errorMessage), duration: const Duration(seconds: 3)),
       );
     } finally {
       if (mounted) {
@@ -501,37 +520,71 @@ class _IngredientPageState extends State<IngredientPage> {
   Future<_OpenFoodFactsProduct?> _fetchFoodFromOpenFoodFacts(
     String barcode,
   ) async {
-    final uri = Uri.parse(
-      'https://world.openfoodfacts.org/api/v0/product/$barcode.json',
-    );
-    final response = await http.get(uri);
-    if (response.statusCode != 200) return null;
+    try {
+      final uri = Uri.parse(
+        'https://world.openfoodfacts.org/api/v0/product/$barcode.json',
+      );
 
-    final body = jsonDecode(response.body);
-    if (body is! Map<String, dynamic>) return null;
-    final status = body['status'];
-    if (status is! num || status.toInt() != 1) return null;
+      // 设置10秒超时，避免请求无限等待
+      final response = await http.get(uri).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception('网络请求超时，请检查网络连接');
+        },
+      );
 
-    final product = body['product'];
-    if (product is! Map) return null;
-    final productMap = Map<String, dynamic>.from(product);
+      if (response.statusCode != 200) {
+        print('[OpenFoodFacts] HTTP错误: ${response.statusCode}');
+        return null;
+      }
 
-    final nutrimentsRaw = productMap['nutriments'];
-    final nutriments = nutrimentsRaw is Map
-        ? Map<String, dynamic>.from(nutrimentsRaw)
-        : <String, dynamic>{};
+      final body = jsonDecode(response.body);
+      if (body is! Map<String, dynamic>) {
+        print('[OpenFoodFacts] 响应格式错误: $body');
+        return null;
+      }
 
-    final productName = (productMap['product_name'] as String?)?.trim() ??
-        (productMap['product_name_zh'] as String?)?.trim() ??
-        '';
-    if (productName.isEmpty) return null;
+      final status = body['status'];
+      if (status is! num || status.toInt() != 1) {
+        final statusVerbose = body['status_verbose'] ?? 'unknown';
+        print('[OpenFoodFacts] 产品未找到: $statusVerbose (barcode: $barcode)');
+        return null;
+      }
 
-    return _OpenFoodFactsProduct(
-      productName: productName,
-      carbPer100g: _toDouble(nutriments['carbohydrates_100g']) ?? 0,
-      proteinPer100g: _toDouble(nutriments['proteins_100g']) ?? 0,
-      fatPer100g: _toDouble(nutriments['fat_100g']) ?? 0,
-    );
+      final product = body['product'];
+      if (product is! Map) {
+        print('[OpenFoodFacts] 产品数据格式错误');
+        return null;
+      }
+      final productMap = Map<String, dynamic>.from(product);
+
+      final nutrimentsRaw = productMap['nutriments'];
+      final nutriments = nutrimentsRaw is Map
+          ? Map<String, dynamic>.from(nutrimentsRaw)
+          : <String, dynamic>{};
+
+      // 尝试多种语言的产品名称，优先中文
+      final productName = (productMap['product_name_zh'] as String?)?.trim() ??
+          (productMap['product_name_en'] as String?)?.trim() ??
+          (productMap['product_name'] as String?)?.trim() ??
+          (productMap['product_name_fr'] as String?)?.trim() ??
+          '';
+      if (productName.isEmpty) {
+        print('[OpenFoodFacts] 产品名称为空');
+        return null;
+      }
+
+      return _OpenFoodFactsProduct(
+        productName: productName,
+        carbPer100g: _toDouble(nutriments['carbohydrates_100g']) ?? 0,
+        proteinPer100g: _toDouble(nutriments['proteins_100g']) ?? 0,
+        fatPer100g: _toDouble(nutriments['fat_100g']) ?? 0,
+      );
+    } catch (e) {
+      print('[OpenFoodFacts] 请求异常: $e');
+      // 重新抛出以便上层处理
+      rethrow;
+    }
   }
 
   String _inferCategory({
