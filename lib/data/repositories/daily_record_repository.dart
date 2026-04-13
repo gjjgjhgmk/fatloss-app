@@ -163,15 +163,32 @@ class DailyRecordRepository {
     String dailyMealRecordId,
     List<MealItemRecord> items,
   ) async {
-    // 先删除所有旧食材
+    // 先删除所有旧食材（本地和云端）
     final existingItems = getMealItems(dailyMealRecordId);
+    final existingItemIds = existingItems.map((e) => e.id).toList();
+
+    // 从本地删除
     for (final item in existingItems) {
       await _hiveHelper.mealItemRecordsBoxInstance.delete(item.id);
     }
 
-    // 批量写入新食材
+    // 从云端删除旧食材
+    if (existingItemIds.isNotEmpty) {
+      try {
+        await SupabaseConfig.client
+            .from('meal_item_records')
+            .delete()
+            .inFilter('id', existingItemIds);
+      } catch (e) {
+        print('[Sync] 删除云端旧食材失败: $e');
+      }
+    }
+
+    // 批量写入新食材到本地
+    final List<String> newItemIds = [];
     for (final item in items) {
       final id = _uuid.v4();
+      newItemIds.add(id);
       await _hiveHelper.mealItemRecordsBoxInstance.put(
         id,
         item.copyWith(id: id, dailyMealRecordId: dailyMealRecordId),
