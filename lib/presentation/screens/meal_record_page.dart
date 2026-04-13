@@ -92,6 +92,13 @@ class _MealRecordPageState extends State<MealRecordPage> {
           ),
         ],
       ),
+      bottomNavigationBar: Consumer<DietProvider>(
+        builder: (context, provider, child) {
+          final meal = provider.getMealRecord(widget.mealOrder);
+          if (meal == null) return const SizedBox.shrink();
+          return _buildBottomActionBar(provider);
+        },
+      ),
       body: Consumer<DietProvider>(
         builder: (context, provider, child) {
           final meal = provider.getMealRecord(widget.mealOrder);
@@ -169,22 +176,6 @@ class _MealRecordPageState extends State<MealRecordPage> {
               Expanded(
                 child: _buildIngredientSelector(provider),
               ),
-
-              // 备注输入
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  controller: _notesController,
-                  decoration: const InputDecoration(
-                    hintText: '添加备注（如：少油煎）',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 1,
-                ),
-              ),
-
-              // 保存按钮
-              _buildSaveButton(provider),
             ],
           );
         },
@@ -536,18 +527,48 @@ class _MealRecordPageState extends State<MealRecordPage> {
   }
 
   Widget _buildSaveButton(DietProvider provider) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _isDataLoaded ? () => _saveMeal(provider) : null,
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+        ),
+        child: const Text('保存记录', style: TextStyle(fontSize: 16)),
+      ),
+    );
+  }
+
+  Widget _buildBottomActionBar(DietProvider provider) {
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _isDataLoaded ? () => _saveMeal(provider) : null,
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
             ),
-            child: const Text('保存记录', style: TextStyle(fontSize: 16)),
-          ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            TextField(
+              controller: _notesController,
+              decoration: const InputDecoration(
+                hintText: '添加备注',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              maxLines: 1,
+            ),
+            const SizedBox(height: 8),
+            _buildSaveButton(provider),
+          ],
         ),
       ),
     );

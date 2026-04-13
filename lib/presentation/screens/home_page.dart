@@ -257,69 +257,74 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ],
               ),
-              Row(
-                children: [
-                  IconButton(
-                    icon:
-                        const Icon(Icons.monitor_weight, color: Colors.white70),
-                    onPressed: () => _navigateToWeightRecord(context),
-                    tooltip: '体重记录',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.straighten, color: Colors.white70),
-                    onPressed: () => _navigateToWaistRecord(context),
-                    tooltip: '腰围记录',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.restaurant_menu,
-                        color: Colors.white70),
-                    onPressed: () => _navigateToIngredients(context),
-                    tooltip: '食材库',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.bar_chart, color: Colors.white70),
-                    onPressed: () => _navigateToReview(context),
-                    tooltip: '复盘',
-                  ),
-                  const SizedBox(width: 4),
-                  Consumer<SyncProvider>(
-                    builder: (context, syncProvider, child) {
-                      final status = syncProvider.status;
-                      IconData icon;
-                      Color color;
-                      VoidCallback? onPressed;
+              Flexible(
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  runSpacing: 2,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.monitor_weight,
+                          color: Colors.white70),
+                      onPressed: () => _navigateToWeightRecord(context),
+                      tooltip: '体重记录',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.straighten, color: Colors.white70),
+                      onPressed: () => _navigateToWaistRecord(context),
+                      tooltip: '腰围记录',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.restaurant_menu,
+                          color: Colors.white70),
+                      onPressed: () => _navigateToIngredients(context),
+                      tooltip: '食材库',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.bar_chart, color: Colors.white70),
+                      onPressed: () => _navigateToReview(context),
+                      tooltip: '复盘',
+                    ),
+                    const SizedBox(width: 4),
+                    Consumer<SyncProvider>(
+                      builder: (context, syncProvider, child) {
+                        final status = syncProvider.status;
+                        IconData icon;
+                        Color color;
+                        VoidCallback? onPressed;
 
-                      switch (status.state) {
-                        case SyncState.syncing:
-                          icon = Icons.sync;
-                          color = Colors.orange;
-                          onPressed = null;
-                          break;
-                        case SyncState.error:
-                          icon = Icons.sync_problem;
-                          color = Colors.red;
-                          onPressed = () => syncProvider.triggerSync();
-                          break;
-                        case SyncState.success:
-                          icon = Icons.cloud_done;
-                          color = Colors.green;
-                          onPressed = () => syncProvider.triggerSync();
-                          break;
-                        case SyncState.idle:
-                        default:
-                          icon = Icons.cloud_sync;
-                          color = Colors.white70;
-                          onPressed = () => syncProvider.triggerSync();
-                      }
+                        switch (status.state) {
+                          case SyncState.syncing:
+                            icon = Icons.sync;
+                            color = Colors.orange;
+                            onPressed = null;
+                            break;
+                          case SyncState.error:
+                            icon = Icons.sync_problem;
+                            color = Colors.red;
+                            onPressed = () => syncProvider.triggerSync();
+                            break;
+                          case SyncState.success:
+                            icon = Icons.cloud_done;
+                            color = Colors.green;
+                            onPressed = () => syncProvider.triggerSync();
+                            break;
+                          case SyncState.idle:
+                            icon = Icons.cloud_sync;
+                            color = Colors.white70;
+                            onPressed = () => syncProvider.triggerSync();
+                        }
 
-                      return IconButton(
-                        icon: Icon(icon, color: color),
-                        onPressed: onPressed,
-                        tooltip: status.displayText,
-                      );
-                    },
-                  ),
-                ],
+                        return IconButton(
+                          icon: Icon(icon, color: color),
+                          onPressed: onPressed,
+                          tooltip: status.displayText,
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
