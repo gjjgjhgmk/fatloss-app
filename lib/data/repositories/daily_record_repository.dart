@@ -135,15 +135,15 @@ class DailyRecordRepository {
     }
   }
 
+  /// 保存餐次食材记录（追加模式，不会删除已有记录）
+  /// items 是本次要添加的食材列表
   Future<void> saveMealItems(
     String dailyMealRecordId,
     List<MealItemRecord> items,
   ) async {
-    final existingItems = getMealItems(dailyMealRecordId);
-    for (final item in existingItems) {
-      await _hiveHelper.mealItemRecordsBoxInstance.delete(item.id);
-    }
+    if (items.isEmpty) return;
 
+    // 保存本次新增的食材（追加到已有的后面）
     for (final item in items) {
       final id = _uuid.v4();
       await _hiveHelper.mealItemRecordsBoxInstance.put(
@@ -152,10 +152,12 @@ class DailyRecordRepository {
       );
     }
 
+    // 重新计算总营养素（从所有食材计算，包括之前保存的和本次新增的）
+    final allItems = getMealItems(dailyMealRecordId);
     double totalCarb = 0;
     double totalProtein = 0;
     double totalFat = 0;
-    for (final item in items) {
+    for (final item in allItems) {
       totalCarb += item.carb;
       totalProtein += item.protein;
       totalFat += item.fat;
@@ -175,7 +177,59 @@ class DailyRecordRepository {
     await _hiveHelper.dailyMealRecordsBoxInstance
         .put(dailyMealRecordId, updatedRecord);
 
+    await _syncToSupabase(updatedRecord, allItems);
+  }
+
+  /// 替换餐次的所有食材（用于清空后重新记录）
+  Future<void> replaceMealItems(
+    String dailyMealRecordId,
+    List<MealItemRecord> items,
+  ) async {
+    // 先删除所有旧食材
+    final existingItems = getMealItems(dailyMealRecordId);
+    for (final item in existingItems) {
+      await _hiveHelper.mealItemRecordsBoxInstance.delete(item.id);
+    }
+
+    // 批量写入新食材
+    for (final item in items) {
+      final id = _uuid.v4();
+      await _hiveHelper.mealItemRecordsBoxInstance.put(
+        id,
+        item.copyWith(id: id, dailyMealRecordId: dailyMealRecordId),
+      );
+    }
+
+    // 计算总营养素
+    double totalCarb = 0;
+    double totalProtein = 0;
+    double totalFat = 0;
+    for (final item in items) {
+      totalCarb += item.carb;
+      totalProtein += item.protein;
+      totalFat += item.fat;
+    }
+
+    final record =
+        _hiveHelper.dailyMealRecordsBoxInstance.get(dailyMealRecordId);
+    if (record == null) return;
+
+    final updatedRecord = record.copyWith(
+      actualCarb: totalCarb,
+      actualProtein: totalProtein,
+      actualFat: totalFat,
+      mealStatus: items.isEmpty ? 'pending' : 'completed',
+      updatedAt: DateTime.now(),
+    );
+    await _hiveHelper.dailyMealRecordsBoxInstance
+        .put(dailyMealRecordId, updatedRecord);
+
     await _syncToSupabase(updatedRecord, items);
+  }
+
+  /// 删除指定餐次的单个食材
+  Future<void> deleteMealItem(String itemId) async {
+    await _hiveHelper.mealItemRecordsBoxInstance.delete(itemId);
   }
 
   List<MealItemRecord> getMealItems(String dailyMealRecordId) {

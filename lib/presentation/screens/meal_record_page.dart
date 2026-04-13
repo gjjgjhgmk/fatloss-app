@@ -32,6 +32,7 @@ class _MealRecordPageState extends State<MealRecordPage> {
   Uint8List? _photoPreviewBytes;
   bool _isUploadingPhoto = false;
   final _uuid = const Uuid();
+  bool _isDataLoaded = false;
 
   @override
   void dispose() {
@@ -39,6 +40,39 @@ class _MealRecordPageState extends State<MealRecordPage> {
     _amountController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  /// 加载已保存的食材记录
+  void _loadExistingMealItems(String mealId) {
+    if (_isDataLoaded) return;
+    _isDataLoaded = true;
+
+    final existingItems = _dailyRecordRepo.getMealItems(mealId);
+    if (existingItems.isNotEmpty) {
+      setState(() {
+        for (final item in existingItems) {
+          // 构建 Ingredient 用于显示（只保存必要字段）
+          final ingredient = Ingredient(
+            id: item.ingredientId ?? '',
+            name: item.ingredientName,
+            category: 'carb', // 默认分类，不影响显示
+            carbPer100g: item.carb / (item.amount / 100),
+            proteinPer100g: item.protein / (item.amount / 100),
+            fatPer100g: item.fat / (item.amount / 100),
+          );
+          _selectedItems.add(_SelectedItem(
+            ingredient: ingredient,
+            amount: item.amount,
+            nutrition: NutritionData(
+              carb: item.carb,
+              protein: item.protein,
+              fat: item.fat,
+            ),
+            itemId: item.id, // 保留 itemId 用于删除
+          ));
+        }
+      });
+    }
   }
 
   @override
@@ -61,6 +95,9 @@ class _MealRecordPageState extends State<MealRecordPage> {
             return const Center(child: Text('餐次信息不存在'));
           }
 
+          // 加载已保存的食材记录
+          _loadExistingMealItems(meal.id);
+
           return Column(
             children: [
               // 餐次信息
@@ -82,20 +119,40 @@ class _MealRecordPageState extends State<MealRecordPage> {
 
               _buildPhotoCheckinArea(),
 
-              // 已选食材
+              // 已选食材（限制高度，可滚动）
               if (_selectedItems.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  constraints: const BoxConstraints(maxHeight: 150),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
-                        '已选食材',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              '已选食材',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              '${_selectedItems.length}项',
+                              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      ..._selectedItems.map((item) => _buildSelectedItem(item)),
+                      Flexible(
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: _selectedItems.length,
+                          itemBuilder: (context, index) =>
+                              _buildSelectedItem(_selectedItems[index]),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -103,7 +160,7 @@ class _MealRecordPageState extends State<MealRecordPage> {
               // 实时营养素计算
               _buildNutritionPreview(),
 
-              // 食材搜索和选择
+              // 食材搜索和选择（占据剩余空间）
               Expanded(
                 child: _buildIngredientSelector(provider),
               ),
@@ -154,10 +211,16 @@ class _MealRecordPageState extends State<MealRecordPage> {
                 '${item.nutrition.fat.toStringAsFixed(0)}f'),
             IconButton(
               icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () {
+              onPressed: () async {
+                // 如果是已保存的记录，先从数据库删除
+                if (item.itemId != null) {
+                  await _dailyRecordRepo.deleteMealItem(item.itemId!);
+                }
                 setState(() {
                   _selectedItems.remove(item);
                 });
+                // 刷新显示的总营养素
+                setState(() {});
               },
             ),
           ],
@@ -504,11 +567,13 @@ class _MealRecordPageState extends State<MealRecordPage> {
     final meal = provider.getMealRecord(widget.mealOrder);
     if (meal == null) return;
 
-    final items = _selectedItems
+    // 只保存新增的食材（没有 itemId 的），已保存的跳过
+    final newItems = _selectedItems
+        .where((item) => item.itemId == null) // 过滤出新增的
         .map((item) => MealItemRecord(
               id: _uuid.v4(),
               dailyMealRecordId: meal.id,
-              ingredientId: item.ingredient.id,
+              ingredientId: item.ingredient.id.isNotEmpty ? item.ingredient.id : null,
               ingredientName: item.ingredient.name,
               amount: item.amount,
               carb: item.nutrition.carb,
@@ -518,7 +583,9 @@ class _MealRecordPageState extends State<MealRecordPage> {
             ))
         .toList();
 
-    await provider.recordMeal(mealOrder: widget.mealOrder, items: items);
+    if (newItems.isNotEmpty) {
+      await provider.recordMeal(mealOrder: widget.mealOrder, items: newItems);
+    }
 
     // 更新照片和备注
     if (_photoUrl != null || _notesController.text.isNotEmpty) {
@@ -543,10 +610,12 @@ class _SelectedItem {
   final Ingredient ingredient;
   final double amount;
   final NutritionData nutrition;
+  final String? itemId; // 如果有值，说明是已保存的记录
 
   _SelectedItem({
     required this.ingredient,
     required this.amount,
     required this.nutrition,
+    this.itemId,
   });
 }
