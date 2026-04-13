@@ -363,14 +363,26 @@ class _IngredientPageState extends State<IngredientPage> {
                     isCooked: isCooked,
                   );
 
-                  if (isEdit) {
-                    await _repo.updateIngredient(newIngredient);
-                  } else {
-                    await _repo.insertIngredient(newIngredient);
+                  try {
+                    if (isEdit) {
+                      await _repo.updateIngredient(newIngredient);
+                    } else {
+                      await _repo.insertIngredient(newIngredient);
+                    }
+                    if (!mounted) return;
+                    Navigator.pop(context);
+                    _loadIngredients();
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(
+                        content: Text(isEdit ? '食材已更新并同步后端' : '食材已添加并同步后端'),
+                      ),
+                    );
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(content: Text('保存失败: $e')),
+                    );
                   }
-
-                  Navigator.pop(context);
-                  _loadIngredients();
                 },
                 child: Text(isEdit ? '保存' : '添加'),
               ),
@@ -427,7 +439,15 @@ class _IngredientPageState extends State<IngredientPage> {
         isCommon: true,
       );
 
-      await _repo.insertIngredient(ingredient);
+      try {
+        await _repo.insertIngredient(ingredient);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('扫码结果保存后端失败: $e')),
+        );
+        return;
+      }
       _loadIngredients();
 
       if (!mounted) return;
@@ -445,7 +465,8 @@ class _IngredientPageState extends State<IngredientPage> {
         errorMessage = '网络错误，请检查网络连接';
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(errorMessage), duration: const Duration(seconds: 3)),
+        SnackBar(
+            content: Text(errorMessage), duration: const Duration(seconds: 3)),
       );
     } finally {
       if (mounted) {

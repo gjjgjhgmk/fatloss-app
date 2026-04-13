@@ -30,45 +30,82 @@ class IngredientRepository {
 
   Future<void> insertIngredient(Ingredient ingredient) async {
     await _hiveHelper.ingredientsBoxInstance.put(ingredient.id, ingredient);
-    await _syncIngredientToCloud(ingredient);
+    try {
+      await _syncIngredientToCloud(ingredient);
+    } catch (e) {
+      await _hiveHelper.ingredientsBoxInstance.delete(ingredient.id);
+      rethrow;
+    }
   }
 
   Future<void> updateIngredient(Ingredient ingredient) async {
-    // 更新本地，确保 updatedAt 改变
+    final oldIngredient = _hiveHelper.ingredientsBoxInstance.get(ingredient.id);
     final updated = ingredient.copyWith(updatedAt: DateTime.now());
+
     await _hiveHelper.ingredientsBoxInstance.put(updated.id, updated);
-    await _syncIngredientToCloud(updated);
+    try {
+      await _syncIngredientToCloud(updated);
+    } catch (e) {
+      if (oldIngredient != null) {
+        await _hiveHelper.ingredientsBoxInstance
+            .put(oldIngredient.id, oldIngredient);
+      } else {
+        await _hiveHelper.ingredientsBoxInstance.delete(updated.id);
+      }
+      rethrow;
+    }
   }
 
-  Future<void> _syncIngredientToCloud(Ingredient ingredient, {int retryCount = 3}) async {
+  Future<void> _syncIngredientToCloud(Ingredient ingredient,
+      {int retryCount = 3}) async {
+    Object? lastError;
+
     for (int i = 0; i < retryCount; i++) {
       try {
-        await SupabaseConfig.client.from('ingredients').upsert(
-          ingredient.toMap(includeRemainingAmount: false),
-        );
+        final payload = ingredient.toMap(includeRemainingAmount: false);
+        await _upsertIngredientWithSchemaFallback(payload);
         print('[Sync] 食材 ${ingredient.name} 同步成功');
         return;
       } catch (e) {
-        print('[Sync] 食材 ${ingredient.name} 同步失败 (尝试 ${i + 1}/$retryCount): $e');
+        lastError = e;
+        print(
+            '[Sync] 食材 ${ingredient.name} 同步失败 (尝试 ${i + 1}/$retryCount): $e');
         if (i < retryCount - 1) {
-          // 指数退避: 1s, 2s, 4s
-          await Future.delayed(Duration(seconds: 1 * (i + 1)));
+          await Future.delayed(Duration(seconds: i + 1));
         }
       }
     }
-    // 所有重试都失败，记录错误（不再静默忽略）
-    print('[Sync] 食材 ${ingredient.id} 同步失败，已放弃');
+
+    throw Exception('食材同步失败: ${ingredient.name}, error: $lastError');
+  }
+
+  Future<void> _upsertIngredientWithSchemaFallback(
+      Map<String, dynamic> payload) async {
+    try {
+      await SupabaseConfig.client.from('ingredients').upsert(payload);
+    } catch (e) {
+      final msg = e.toString().toLowerCase();
+      if (!msg.contains('updated_at')) {
+        rethrow;
+      }
+
+      // 兼容旧表结构：如果后端没有 updated_at 字段，自动降级再写一次。
+      final fallbackPayload = Map<String, dynamic>.from(payload)
+        ..remove('updated_at');
+      await SupabaseConfig.client.from('ingredients').upsert(fallbackPayload);
+    }
   }
 
   Future<void> deleteIngredient(String id) async {
     final ingredient = _hiveHelper.ingredientsBoxInstance.get(id);
+    if (ingredient == null) return;
+
     await _hiveHelper.ingredientsBoxInstance.delete(id);
-    if (ingredient != null) {
-      try {
-        await SupabaseConfig.client.from('ingredients').delete().eq('id', id);
-      } catch (e) {
-        print('[Sync] 删除食材 ${ingredient.name} 失败: $e');
-      }
+    try {
+      await SupabaseConfig.client.from('ingredients').delete().eq('id', id);
+    } catch (e) {
+      await _hiveHelper.ingredientsBoxInstance.put(ingredient.id, ingredient);
+      throw Exception('删除食材失败: $e');
     }
   }
 
@@ -81,8 +118,10 @@ class IngredientRepository {
 
   List<Ingredient> getLowStockIngredients({double threshold = 100}) {
     return _hiveHelper.ingredientsBoxInstance.values
-        .where((i) => i.remainingAmount != null && i.remainingAmount! < threshold)
+        .where(
+            (i) => i.remainingAmount != null && i.remainingAmount! < threshold)
         .toList()
-      ..sort((a, b) => (a.remainingAmount ?? 0).compareTo(b.remainingAmount ?? 0));
+      ..sort(
+          (a, b) => (a.remainingAmount ?? 0).compareTo(b.remainingAmount ?? 0));
   }
 }

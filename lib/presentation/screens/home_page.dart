@@ -936,13 +936,16 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _navigateToMealRecord(BuildContext context, int mealOrder) {
-    Navigator.push(
+  Future<void> _navigateToMealRecord(
+      BuildContext context, int mealOrder) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => MealRecordPage(mealOrder: mealOrder),
       ),
     );
+    if (!mounted) return;
+    await context.read<DietProvider>().loadDailyStatus();
   }
 
   void _navigateToReview(BuildContext context) {
@@ -954,13 +957,15 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _navigateToIngredients(BuildContext context) {
-    Navigator.push(
+  Future<void> _navigateToIngredients(BuildContext context) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => const IngredientPage(),
       ),
     );
+    if (!mounted) return;
+    await context.read<DietProvider>().loadIngredients();
   }
 
   void _navigateToWeightRecord(BuildContext context) {

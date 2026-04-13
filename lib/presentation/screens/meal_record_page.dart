@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/supabase/supabase_config.dart';
 import '../../core/utils/nutrition_calculator.dart';
+import '../../data/models/daily_meal_record.dart';
 import '../../data/models/ingredient.dart';
 import '../../data/models/meal_item_record.dart';
 import '../../data/repositories/daily_record_repository.dart';
@@ -42,23 +43,26 @@ class _MealRecordPageState extends State<MealRecordPage> {
     super.dispose();
   }
 
-  /// 加载已保存的食材记录
-  void _loadExistingMealItems(String mealId) {
+  /// 加载已保存的食材与元数据
+  void _loadExistingMealData(DailyMealRecord meal) {
     if (_isDataLoaded) return;
     _isDataLoaded = true;
 
-    final existingItems = _dailyRecordRepo.getMealItems(mealId);
+    _photoUrl = meal.photoUrl;
+    _notesController.text = meal.notes ?? '';
+
+    final existingItems = _dailyRecordRepo.getMealItems(meal.id);
     if (existingItems.isNotEmpty) {
       setState(() {
         for (final item in existingItems) {
-          // 构建 Ingredient 用于显示（只保存必要字段）
+          final per100Factor = item.amount <= 0 ? 1 : item.amount / 100;
           final ingredient = Ingredient(
             id: item.ingredientId ?? '',
             name: item.ingredientName,
-            category: 'carb', // 默认分类，不影响显示
-            carbPer100g: item.carb / (item.amount / 100),
-            proteinPer100g: item.protein / (item.amount / 100),
-            fatPer100g: item.fat / (item.amount / 100),
+            category: 'carb',
+            carbPer100g: item.carb / per100Factor,
+            proteinPer100g: item.protein / per100Factor,
+            fatPer100g: item.fat / per100Factor,
           );
           _selectedItems.add(_SelectedItem(
             ingredient: ingredient,
@@ -96,7 +100,7 @@ class _MealRecordPageState extends State<MealRecordPage> {
           }
 
           // 加载已保存的食材记录
-          _loadExistingMealItems(meal.id);
+          _loadExistingMealData(meal);
 
           return Column(
             children: [
@@ -139,7 +143,8 @@ class _MealRecordPageState extends State<MealRecordPage> {
                             ),
                             Text(
                               '${_selectedItems.length}项',
-                              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                              style: TextStyle(
+                                  color: Colors.grey[600], fontSize: 12),
                             ),
                           ],
                         ),
@@ -211,16 +216,10 @@ class _MealRecordPageState extends State<MealRecordPage> {
                 '${item.nutrition.fat.toStringAsFixed(0)}f'),
             IconButton(
               icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () async {
-                // 如果是已保存的记录，先从数据库删除
-                if (item.itemId != null) {
-                  await _dailyRecordRepo.deleteMealItem(item.itemId!);
-                }
+              onPressed: () {
                 setState(() {
                   _selectedItems.remove(item);
                 });
-                // 刷新显示的总营养素
-                setState(() {});
               },
             ),
           ],
@@ -511,22 +510,14 @@ class _MealRecordPageState extends State<MealRecordPage> {
       final publicUrl = SupabaseConfig.client.storage
           .from(_imageBucket)
           .getPublicUrl(filePath);
-
-      final updatedMeal = meal.copyWith(
-        photoUrl: publicUrl,
-        notes: _notesController.text.trim().isNotEmpty
-            ? _notesController.text.trim()
-            : meal.notes,
-        updatedAt: DateTime.now(),
-      );
-      await _dailyRecordRepo.updateMealActual(updatedMeal);
-      await provider.loadDailyStatus();
-
-      if (!mounted) return;
       setState(() {
         _photoUrl = publicUrl;
         _photoPreviewBytes = bytes;
       });
+
+      await _saveMealMeta(provider, meal.id);
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('图片上传并关联记录成功')),
       );
@@ -551,8 +542,7 @@ class _MealRecordPageState extends State<MealRecordPage> {
         child: SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed:
-                _selectedItems.isEmpty ? null : () => _saveMeal(provider),
+            onPressed: _isDataLoaded ? () => _saveMeal(provider) : null,
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
@@ -567,13 +557,12 @@ class _MealRecordPageState extends State<MealRecordPage> {
     final meal = provider.getMealRecord(widget.mealOrder);
     if (meal == null) return;
 
-    // 只保存新增的食材（没有 itemId 的），已保存的跳过
-    final newItems = _selectedItems
-        .where((item) => item.itemId == null) // 过滤出新增的
+    final allItems = _selectedItems
         .map((item) => MealItemRecord(
               id: _uuid.v4(),
               dailyMealRecordId: meal.id,
-              ingredientId: item.ingredient.id.isNotEmpty ? item.ingredient.id : null,
+              ingredientId:
+                  item.ingredient.id.isNotEmpty ? item.ingredient.id : null,
               ingredientName: item.ingredient.name,
               amount: item.amount,
               carb: item.nutrition.carb,
@@ -583,26 +572,38 @@ class _MealRecordPageState extends State<MealRecordPage> {
             ))
         .toList();
 
-    if (newItems.isNotEmpty) {
-      await provider.recordMeal(mealOrder: widget.mealOrder, items: newItems);
+    await _dailyRecordRepo.replaceMealItems(meal.id, allItems);
+    await provider.loadDailyStatus();
+    await _saveMealMeta(provider, meal.id);
+
+    if (!mounted) return;
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('记录保存成功')),
+    );
+  }
+
+  Future<void> _saveMealMeta(DietProvider provider, String mealId) async {
+    final latestMeal = _dailyRecordRepo.getMealRecordById(mealId) ??
+        provider.getMealRecord(widget.mealOrder);
+    if (latestMeal == null) return;
+
+    final targetPhoto =
+        (_photoUrl?.trim().isEmpty ?? true) ? null : _photoUrl!.trim();
+    final noteText = _notesController.text.trim();
+    final targetNotes = noteText.isEmpty ? null : noteText;
+
+    if (latestMeal.photoUrl == targetPhoto && latestMeal.notes == targetNotes) {
+      return;
     }
 
-    // 更新照片和备注
-    if (_photoUrl != null || _notesController.text.isNotEmpty) {
-      final updatedMeal = meal.copyWith(
-        photoUrl: _photoUrl,
-        notes: _notesController.text.isNotEmpty ? _notesController.text : null,
-        updatedAt: DateTime.now(),
-      );
-      await _dailyRecordRepo.updateMealActual(updatedMeal);
-    }
-
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('记录保存成功')),
-      );
-    }
+    final updatedMeal = latestMeal.copyWith(
+      photoUrl: targetPhoto,
+      notes: targetNotes,
+      updatedAt: DateTime.now(),
+    );
+    await _dailyRecordRepo.updateMealActual(updatedMeal);
+    await provider.loadDailyStatus();
   }
 }
 

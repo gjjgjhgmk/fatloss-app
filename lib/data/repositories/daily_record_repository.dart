@@ -70,7 +70,9 @@ class DailyRecordRepository {
     final existingRecords = getDailyRecords(date);
     final Map<String, Map<String, double>> existingActuals = {};
     for (final record in existingRecords) {
-      if (record.actualCarb > 0 || record.actualProtein > 0 || record.actualFat > 0) {
+      if (record.actualCarb > 0 ||
+          record.actualProtein > 0 ||
+          record.actualFat > 0) {
         existingActuals[record.id] = {
           'carb': record.actualCarb,
           'protein': record.actualProtein,
@@ -98,7 +100,8 @@ class DailyRecordRepository {
           // 如果原本已完成，保持完成状态
           // mealStatus: record.mealStatus,
         );
-        await _hiveHelper.dailyMealRecordsBoxInstance.put(record.id, updatedRecord);
+        await _hiveHelper.dailyMealRecordsBoxInstance
+            .put(record.id, updatedRecord);
       }
     }
 
@@ -152,32 +155,7 @@ class DailyRecordRepository {
       );
     }
 
-    // 重新计算总营养素（从所有食材计算，包括之前保存的和本次新增的）
-    final allItems = getMealItems(dailyMealRecordId);
-    double totalCarb = 0;
-    double totalProtein = 0;
-    double totalFat = 0;
-    for (final item in allItems) {
-      totalCarb += item.carb;
-      totalProtein += item.protein;
-      totalFat += item.fat;
-    }
-
-    final record =
-        _hiveHelper.dailyMealRecordsBoxInstance.get(dailyMealRecordId);
-    if (record == null) return;
-
-    final updatedRecord = record.copyWith(
-      actualCarb: totalCarb,
-      actualProtein: totalProtein,
-      actualFat: totalFat,
-      mealStatus: 'completed',
-      updatedAt: DateTime.now(),
-    );
-    await _hiveHelper.dailyMealRecordsBoxInstance
-        .put(dailyMealRecordId, updatedRecord);
-
-    await _syncToSupabase(updatedRecord, allItems);
+    await _recalculateMealTotalsAndSync(dailyMealRecordId);
   }
 
   /// 替换餐次的所有食材（用于清空后重新记录）
@@ -200,36 +178,15 @@ class DailyRecordRepository {
       );
     }
 
-    // 计算总营养素
-    double totalCarb = 0;
-    double totalProtein = 0;
-    double totalFat = 0;
-    for (final item in items) {
-      totalCarb += item.carb;
-      totalProtein += item.protein;
-      totalFat += item.fat;
-    }
-
-    final record =
-        _hiveHelper.dailyMealRecordsBoxInstance.get(dailyMealRecordId);
-    if (record == null) return;
-
-    final updatedRecord = record.copyWith(
-      actualCarb: totalCarb,
-      actualProtein: totalProtein,
-      actualFat: totalFat,
-      mealStatus: items.isEmpty ? 'pending' : 'completed',
-      updatedAt: DateTime.now(),
-    );
-    await _hiveHelper.dailyMealRecordsBoxInstance
-        .put(dailyMealRecordId, updatedRecord);
-
-    await _syncToSupabase(updatedRecord, items);
+    await _recalculateMealTotalsAndSync(dailyMealRecordId);
   }
 
   /// 删除指定餐次的单个食材
   Future<void> deleteMealItem(String itemId) async {
+    final item = _hiveHelper.mealItemRecordsBoxInstance.get(itemId);
+    if (item == null) return;
     await _hiveHelper.mealItemRecordsBoxInstance.delete(itemId);
+    await _recalculateMealTotalsAndSync(item.dailyMealRecordId);
   }
 
   List<MealItemRecord> getMealItems(String dailyMealRecordId) {
@@ -243,6 +200,34 @@ class DailyRecordRepository {
     for (final item in items) {
       await _hiveHelper.mealItemRecordsBoxInstance.delete(item.id);
     }
+    await _recalculateMealTotalsAndSync(dailyMealRecordId);
+  }
+
+  Future<void> _recalculateMealTotalsAndSync(String dailyMealRecordId) async {
+    final record =
+        _hiveHelper.dailyMealRecordsBoxInstance.get(dailyMealRecordId);
+    if (record == null) return;
+
+    final items = getMealItems(dailyMealRecordId);
+    double totalCarb = 0;
+    double totalProtein = 0;
+    double totalFat = 0;
+    for (final item in items) {
+      totalCarb += item.carb;
+      totalProtein += item.protein;
+      totalFat += item.fat;
+    }
+
+    final updatedRecord = record.copyWith(
+      actualCarb: totalCarb,
+      actualProtein: totalProtein,
+      actualFat: totalFat,
+      mealStatus: items.isEmpty ? 'pending' : 'completed',
+      updatedAt: DateTime.now(),
+    );
+    await _hiveHelper.dailyMealRecordsBoxInstance
+        .put(dailyMealRecordId, updatedRecord);
+    await _syncToSupabase(updatedRecord, items);
   }
 
   Map<String, double> getDailyTotals(String date) {
@@ -324,7 +309,8 @@ class DailyRecordRepository {
     }
   }
 
-  Future<void> _syncDateRecordsToSupabase(String date, {int retryCount = 3}) async {
+  Future<void> _syncDateRecordsToSupabase(String date,
+      {int retryCount = 3}) async {
     final records = getDailyRecords(date);
     if (records.isEmpty) return;
 

@@ -5,6 +5,7 @@ import '../../data/models/meal_item_record.dart';
 import '../../data/models/waist_record.dart';
 import '../../data/models/weight_record.dart';
 import '../../data/models/workout_record.dart';
+import '../../data/models/ingredient.dart';
 import '../../data/repositories/daily_record_repository.dart';
 import '../../data/repositories/weight_record_repository.dart';
 import '../../data/repositories/waist_record_repository.dart';
@@ -32,6 +33,7 @@ class SyncService {
       await _pullTodayWorkoutRecords(today);
       await _pullTodayWeightRecords(today);
       await _pullTodayWaistRecords(today);
+      await _pullIngredients();
 
       print('☁️ 云端数据拉取完成');
     } catch (e) {
@@ -70,7 +72,8 @@ class SyncService {
     }
 
     // 获取本地今日记录
-    final localMeals = dailyBox.values.where((r) => r.recordDate == today).toList();
+    final localMeals =
+        dailyBox.values.where((r) => r.recordDate == today).toList();
 
     // 合并策略：比较 updatedAt，保留最新
     for (final localMeal in localMeals) {
@@ -171,7 +174,8 @@ class SyncService {
       cloudRecordsMap[record.id] = record;
     }
 
-    final localRecords = workoutBox.values.where((r) => r.recordDate == today).toList();
+    final localRecords =
+        workoutBox.values.where((r) => r.recordDate == today).toList();
 
     for (final local in localRecords) {
       final cloud = cloudRecordsMap[local.id];
@@ -213,7 +217,8 @@ class SyncService {
       cloudRecordsMap[record.id] = record;
     }
 
-    final localRecords = weightBox.values.where((r) => r.recordDate == today).toList();
+    final localRecords =
+        weightBox.values.where((r) => r.recordDate == today).toList();
 
     for (final local in localRecords) {
       final cloud = cloudRecordsMap[local.id];
@@ -255,7 +260,8 @@ class SyncService {
       cloudRecordsMap[record.id] = record;
     }
 
-    final localRecords = waistBox.values.where((r) => r.recordDate == today).toList();
+    final localRecords =
+        waistBox.values.where((r) => r.recordDate == today).toList();
 
     for (final local in localRecords) {
       final cloud = cloudRecordsMap[local.id];
@@ -275,6 +281,30 @@ class SyncService {
       await waistBox.put(record.id, record);
       print('[Sync] 从云端写入腰围记录 ${record.id}');
     }
+  }
+
+  Future<void> _pullIngredients() async {
+    final ingredientRows =
+        await SupabaseConfig.client.from('ingredients').select();
+
+    if (ingredientRows.isEmpty) {
+      print('[Sync] 云端无食材数据，保留本地');
+      return;
+    }
+
+    final ingredientsBox = HiveHelper.instance.ingredientsBoxInstance;
+    for (final row in ingredientRows) {
+      final cloudIngredient =
+          Ingredient.fromMap(Map<String, dynamic>.from(row));
+      final localIngredient = ingredientsBox.get(cloudIngredient.id);
+
+      if (localIngredient == null ||
+          cloudIngredient.updatedAt.isAfter(localIngredient.updatedAt)) {
+        await ingredientsBox.put(cloudIngredient.id, cloudIngredient);
+      }
+    }
+
+    print('[Sync] 已从云端拉取 ${ingredientRows.length} 条食材数据');
   }
 
   /// 冷启动静默同步 - Fire and Forget
@@ -325,8 +355,8 @@ class SyncService {
       }
 
       await SupabaseConfig.client.from('daily_meal_records').upsert(
-        records.map((r) => r.toMap()).toList(),
-      );
+            records.map((r) => r.toMap()).toList(),
+          );
       print('📋 已同步 ${records.length} 条餐次记录');
     } catch (e) {
       print('⚠️ 餐次记录同步失败: $e');
@@ -345,8 +375,8 @@ class SyncService {
       }
 
       await SupabaseConfig.client.from('weight_records').upsert(
-        records.map((r) => r.toMap()).toList(),
-      );
+            records.map((r) => r.toMap()).toList(),
+          );
       print('⚖️ 已同步 ${records.length} 条体重记录');
     } catch (e) {
       print('⚠️ 体重记录同步失败: $e');
@@ -365,8 +395,8 @@ class SyncService {
       }
 
       await SupabaseConfig.client.from('waist_records').upsert(
-        record.toMap(),
-      );
+            record.toMap(),
+          );
       print('📏 已同步 1 条腰围记录');
     } catch (e) {
       print('⚠️ 腰围记录同步失败: $e');
@@ -386,8 +416,8 @@ class SyncService {
       }
 
       await SupabaseConfig.client.from('workout_records').upsert(
-        record.toMap(),
-      );
+            record.toMap(),
+          );
       print('💪 已同步 1 条训练记录');
     } catch (e) {
       print('⚠️ 训练记录同步失败: $e');
@@ -407,10 +437,10 @@ class SyncService {
       // 如果没有上次同步时间，则同步全部
       if (lastSyncTime == null) {
         await SupabaseConfig.client.from('ingredients').upsert(
-          allIngredients
-              .map((i) => i.toMap(includeRemainingAmount: false))
-              .toList(),
-        );
+              allIngredients
+                  .map((i) => i.toMap(includeRemainingAmount: false))
+                  .toList(),
+            );
         print('🥗 已同步全部 ${allIngredients.length} 条食材');
         return;
       }
@@ -419,10 +449,10 @@ class SyncService {
       final lastSync = DateTime.tryParse(lastSyncTime);
       if (lastSync == null) {
         await SupabaseConfig.client.from('ingredients').upsert(
-          allIngredients
-              .map((i) => i.toMap(includeRemainingAmount: false))
-              .toList(),
-        );
+              allIngredients
+                  .map((i) => i.toMap(includeRemainingAmount: false))
+                  .toList(),
+            );
         print('🥗 已同步全部 ${allIngredients.length} 条食材');
         return;
       }
@@ -438,10 +468,10 @@ class SyncService {
       }
 
       await SupabaseConfig.client.from('ingredients').upsert(
-        modifiedIngredients
-            .map((i) => i.toMap(includeRemainingAmount: false))
-            .toList(),
-      );
+            modifiedIngredients
+                .map((i) => i.toMap(includeRemainingAmount: false))
+                .toList(),
+          );
       print('🥗 已同步 ${modifiedIngredients.length} 条变更食材');
     } catch (e) {
       print('⚠️ 食材库同步失败: $e');
@@ -451,10 +481,8 @@ class SyncService {
   /// 同步饮食规则（仅在云端为空时）
   Future<void> _syncDietRulesIfEmpty() async {
     try {
-      final response = await SupabaseConfig.client
-          .from('diet_rules')
-          .select()
-          .limit(1);
+      final response =
+          await SupabaseConfig.client.from('diet_rules').select().limit(1);
 
       if (response.isNotEmpty) {
         print('📖 饮食规则已存在，跳过');
