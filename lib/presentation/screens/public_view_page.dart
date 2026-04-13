@@ -200,15 +200,35 @@ class _PublicViewPageState extends State<PublicViewPage> {
     for (final row in itemRows) {
       final mealId = row['daily_meal_record_id'] as String?;
       if (mealId == null) continue;
-      itemsByMeal.putIfAbsent(mealId, () => <_MealItemData>[]).add(
-            _MealItemData(
-              name: (row['name'] as String?) ?? '未命名食材',
-              amount: _toDouble(row['amount']) ?? 0,
-              carb: _toDouble(row['carb']) ?? 0,
-              protein: _toDouble(row['protein']) ?? 0,
-              fat: _toDouble(row['fat']) ?? 0,
-            ),
-          );
+      // 合并同名食材（同一餐次中同名食材合并数量）
+      final existingList = itemsByMeal.putIfAbsent(mealId, () => <_MealItemData>[]);
+      final itemName = (row['name'] as String?) ?? '未命名食材';
+      final amount = _toDouble(row['amount']) ?? 0;
+      final carb = _toDouble(row['carb']) ?? 0;
+      final protein = _toDouble(row['protein']) ?? 0;
+      final fat = _toDouble(row['fat']) ?? 0;
+
+      // 查找是否已有同名食材，有则合并
+      final existingIndex = existingList.indexWhere((item) => item.name == itemName);
+      if (existingIndex >= 0) {
+        // 合并：累加数量和营养素
+        final existing = existingList[existingIndex];
+        existingList[existingIndex] = _MealItemData(
+          name: itemName,
+          amount: existing.amount + amount,
+          carb: existing.carb + carb,
+          protein: existing.protein + protein,
+          fat: existing.fat + fat,
+        );
+      } else {
+        existingList.add(_MealItemData(
+          name: itemName,
+          amount: amount,
+          carb: carb,
+          protein: protein,
+          fat: fat,
+        ));
+      }
     }
 
     final parsedMeals = meals.map((row) {
